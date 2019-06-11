@@ -60,8 +60,13 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 	if c.Address != nil {
 		// Address rect
 		var addrRectHeight float64 = 17
+
 		if len(c.Address.Address2) > 0 {
-			addrRectHeight = 22
+			addrRectHeight = addrRectHeight + 5
+		}
+
+		if len(c.Address.Country) == 0 {
+			addrRectHeight = addrRectHeight - 5
 		}
 
 		pdf.Rect(x, pdf.GetY()+9, 70, addrRectHeight, "F")
