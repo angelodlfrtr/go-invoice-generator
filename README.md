@@ -1,6 +1,7 @@
 # Golang invoice generator
 
-A super fast golang package to generate invoices, delivery notes and quotations as pdf.
+A super fast golang package to generate invoices, delivery notes and quotations as pdf
+using https://github.com/jung-kurt/gofpdf.
 
 ## Download from Github
 
@@ -23,16 +24,16 @@ import (
 
 func main() {
 	doc := generator.New(generator.INVOICE)
-	
+
 	doc.SetHeader(&generator.HeaderFooter{
 		Text: "Some header text",
 	})
-	
+
 	doc.SetFooter(&generator.HeaderFooter{
 		Text:           "<center>Some footer text</center>",
 		Pagination:     true,
 	})
-	
+
 	doc.SetNumber("testnumber")
 	doc.SetVersion("test version")
 
