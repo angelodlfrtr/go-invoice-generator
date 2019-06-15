@@ -23,7 +23,7 @@ import (
 )
 
 func main() {
-	doc := generator.New(generator.INVOICE)
+	doc := generator.New(generator.INVOICE, &generator.Options{})
 
 	doc.SetHeader(&generator.HeaderFooter{
 		Text: "Some header text",
