@@ -1,3 +1,5 @@
+[![GoDoc](https://godoc.org/github.com/angelodlfrtr/go-invoice-generator?status.svg)](https://godoc.org/github.com/angelodlfrtr/go-invoice-generator)
+
 # Golang invoice generator
 
 A super fast golang package to generate invoices, delivery notes and quotations as pdf
