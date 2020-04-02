@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+
 	"github.com/jung-kurt/gofpdf"
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"

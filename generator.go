@@ -1,3 +1,4 @@
+// Package generator allows you to easily generate invoices, delivery notes and quotations in GoLang.
 package generator
 
 import (

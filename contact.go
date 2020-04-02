@@ -3,12 +3,13 @@ package generator
 import (
 	"bytes"
 	b64 "encoding/base64"
-	"github.com/jung-kurt/gofpdf"
 	"image"
+
+	"github.com/jung-kurt/gofpdf"
 )
 
 type Contact struct {
-	Name    string  `validate:"required",min=1,max=64`
+	Name    string  `validate:"required,min=1,max=64"`
 	Logo    *[]byte // Logo byte array
 	Address *Address
 }
@@ -41,7 +42,7 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 
 	// Name
 	if fill {
-		pdf.SetFillColor(GREY_BG_COLOR[0], GREY_BG_COLOR[1], GREY_BG_COLOR[2])
+		pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	} else {
 		pdf.SetFillColor(255, 255, 255)
 	}
@@ -86,5 +87,5 @@ func (c *Contact) appendCompanyContactToDoc(pdf *gofpdf.Fpdf) float64 {
 }
 
 func (c *Contact) appendCustomerContactToDoc(pdf *gofpdf.Fpdf) float64 {
-	return c.appendContactTODoc(130, BASE_MARGIN_TOP+25, true, "R", pdf)
+	return c.appendContactTODoc(130, BaseMarginTop+25, true, "R", pdf)
 }

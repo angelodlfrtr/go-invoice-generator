@@ -11,11 +11,11 @@ func encodeString(str string) string {
 }
 
 func (d *Document) typeAsString() string {
-	if d.Type == INVOICE {
+	if d.Type == Invoice {
 		return d.Options.TextTypeInvoice
 	}
 
-	if d.Type == QUOTATION {
+	if d.Type == Quotation {
 		return d.Options.TextTypeQuotation
 	}
 

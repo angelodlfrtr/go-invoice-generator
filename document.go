@@ -2,21 +2,22 @@ package generator
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/jung-kurt/gofpdf"
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
-	"time"
 )
 
 type Document struct {
 	Options      *Options
 	Header       *HeaderFooter
 	Footer       *HeaderFooter
-	Type         string `validate:"required",oneof=INVOICE DELIVERY_NOTE QUOTATION`
-	Ref          string `validate:"required",min=1,max=32`
-	Version      string `validate:max=32`
-	ClientRef    string `validate:max=64`
-	Description  string `validate:max=1024`
+	Type         string `validate:"required,oneof=INVOICE DELIVERY_NOTE QUOTATION"`
+	Ref          string `validate:"required,min=1,max=32"`
+	Version      string `validate:"max=32"`
+	ClientRef    string `validate:"max=64"`
+	Description  string `validate:"max=1024"`
 	Notes        string
 	Company      *Contact `validate:"required"`
 	Customer     *Contact `validate:"required"`
@@ -25,10 +26,6 @@ type Document struct {
 	ValidityDate string
 	PaymentTerm  string
 }
-
-// ===========================
-// EXPORTED ==================
-// ===========================
 
 func (d *Document) Build() (*gofpdf.Fpdf, error) {
 	// Validate document data
@@ -40,9 +37,9 @@ func (d *Document) Build() (*gofpdf.Fpdf, error) {
 
 	// Build base doc
 	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.SetMargins(BASE_MARGIN, BASE_MARGIN_TOP, BASE_MARGIN)
+	pdf.SetMargins(BaseMargin, BaseMarginTop, BaseMargin)
 	pdf.SetXY(10, 10)
-	pdf.SetTextColor(BASE_TEXT_COLOR[0], BASE_TEXT_COLOR[1], BASE_TEXT_COLOR[2])
+	pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 
 	// Set header
 	if d.Header != nil {
@@ -177,11 +174,11 @@ func (d *Document) appendTitle(pdf *gofpdf.Fpdf) {
 	title := d.typeAsString()
 
 	// Set x y
-	pdf.SetXY(120, BASE_MARGIN_TOP)
+	pdf.SetXY(120, BaseMarginTop)
 
 	// Draw rect
-	pdf.SetFillColor(DARK_BG_COLOR[0], DARK_BG_COLOR[1], DARK_BG_COLOR[2])
-	pdf.Rect(120, BASE_MARGIN_TOP, 80, 10, "F")
+	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
+	pdf.Rect(120, BaseMarginTop, 80, 10, "F")
 
 	// Draw text
 	pdf.SetFont("Helvetica", "", 14)
@@ -192,14 +189,14 @@ func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 	// Append ref
 	refString := fmt.Sprintf("%s: %s", d.Options.TextRefTitle, d.Ref)
 
-	pdf.SetXY(120, BASE_MARGIN_TOP+11)
+	pdf.SetXY(120, BaseMarginTop+11)
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.CellFormat(80, 4, refString, "0", 0, "R", false, 0, "")
 
 	// Append version
 	if len(d.Version) > 0 {
 		versionString := fmt.Sprintf("%s: %s", d.Options.TextVersionTitle, d.Version)
-		pdf.SetXY(120, BASE_MARGIN_TOP+15)
+		pdf.SetXY(120, BaseMarginTop+15)
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.CellFormat(80, 4, encodeString(versionString), "0", 0, "R", false, 0, "")
 	}
@@ -210,7 +207,7 @@ func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 		date = d.Date
 	}
 	dateString := fmt.Sprintf("%s: %s", d.Options.TextDateTitle, date)
-	pdf.SetXY(120, BASE_MARGIN_TOP+19)
+	pdf.SetXY(120, BaseMarginTop+19)
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.CellFormat(80, 4, encodeString(dateString), "0", 0, "R", false, 0, "")
 }
@@ -230,7 +227,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.SetFont("Helvetica", "B", 8)
 
 	// Draw rec
-	pdf.SetFillColor(GREY_BG_COLOR[0], GREY_BG_COLOR[1], GREY_BG_COLOR[2])
+	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	pdf.Rect(10, pdf.GetY(), 190, 6, "F")
 
 	// Description
@@ -268,7 +265,7 @@ func (d *Document) appendItems(pdf *gofpdf.Fpdf) {
 		item := d.Items[i]
 		item.appendColTo(d.Options, pdf)
 
-		if pdf.GetY() > MAX_PAGE_HEIGHT {
+		if pdf.GetY() > MaxPageHeight {
 			// Add page
 			pdf.AddPage()
 			d.drawsTableTitles(pdf)
@@ -287,13 +284,13 @@ func (d *Document) appendNotes(pdf *gofpdf.Fpdf) {
 
 	currentY := pdf.GetY()
 
-	if currentY+30 > MAX_PAGE_HEIGHT {
+	if currentY+30 > MaxPageHeight {
 		pdf.AddPage()
 		currentY = pdf.GetY()
 	}
 
 	pdf.SetFont("Helvetica", "", 9)
-	pdf.SetX(BASE_MARGIN)
+	pdf.SetX(BaseMargin)
 	pdf.SetRightMargin(100)
 	pdf.SetY(currentY + 10)
 
@@ -301,7 +298,7 @@ func (d *Document) appendNotes(pdf *gofpdf.Fpdf) {
 	html := pdf.HTMLBasicNew()
 	html.Write(lineHt, d.Notes)
 
-	pdf.SetRightMargin(BASE_MARGIN)
+	pdf.SetRightMargin(BaseMargin)
 	pdf.SetY(currentY)
 }
 
@@ -326,7 +323,7 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 	totalTax := totalTTC.Sub(totalHT)
 
 	// Check page height (total bloc height = 30)
-	if pdf.GetY()+30 > MAX_PAGE_HEIGHT {
+	if pdf.GetY()+30 > MaxPageHeight {
 		pdf.AddPage()
 	}
 
@@ -335,39 +332,39 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 
 	// Draw TOTAL HT title
 	pdf.SetX(120)
-	pdf.SetFillColor(DARK_BG_COLOR[0], DARK_BG_COLOR[1], DARK_BG_COLOR[2])
+	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
 	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
 	pdf.CellFormat(38, 10, encodeString(d.Options.TextTotalTotal), "0", 0, "R", false, 0, "")
 
 	// Draw TOTAL HT amount
 	pdf.SetX(162)
-	pdf.SetFillColor(GREY_BG_COLOR[0], GREY_BG_COLOR[1], GREY_BG_COLOR[2])
+	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	pdf.Rect(160, pdf.GetY(), 40, 10, "F")
 	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalHT), "0", 0, "L", false, 0, "")
 
 	// Draw TAX title
 	pdf.SetY(pdf.GetY() + 10)
 	pdf.SetX(120)
-	pdf.SetFillColor(DARK_BG_COLOR[0], DARK_BG_COLOR[1], DARK_BG_COLOR[2])
+	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
 	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
 	pdf.CellFormat(38, 10, encodeString(d.Options.TextTotalTax), "0", 0, "R", false, 0, "")
 
 	// Draw TAX amount
 	pdf.SetX(162)
-	pdf.SetFillColor(GREY_BG_COLOR[0], GREY_BG_COLOR[1], GREY_BG_COLOR[2])
+	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	pdf.Rect(160, pdf.GetY(), 40, 10, "F")
 	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalTax), "0", 0, "L", false, 0, "")
 
 	// Draw TOTAL TTC title
 	pdf.SetY(pdf.GetY() + 10)
 	pdf.SetX(120)
-	pdf.SetFillColor(DARK_BG_COLOR[0], DARK_BG_COLOR[1], DARK_BG_COLOR[2])
+	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
 	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
 	pdf.CellFormat(38, 10, encodeString(d.Options.TextTotalWithTax), "0", 0, "R", false, 0, "")
 
 	// Draw TOTAL TTC amount
 	pdf.SetX(162)
-	pdf.SetFillColor(GREY_BG_COLOR[0], GREY_BG_COLOR[1], GREY_BG_COLOR[2])
+	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	pdf.Rect(160, pdf.GetY(), 40, 10, "F")
 	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalTTC), "0", 0, "L", false, 0, "")
 }

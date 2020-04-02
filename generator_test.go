@@ -7,7 +7,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	doc, _ := New(DELIVERY_NOTE, &Options{
+	doc, _ := New(DeliveryNote, &Options{
 		TextTypeInvoice: "FACTURE",
 		AutoPrint:       true,
 	})
@@ -80,7 +80,7 @@ func TestNew(t *testing.T) {
 }
 
 func ExampleNew() {
-	doc, _ := New(DELIVERY_NOTE, &Options{
+	doc, _ := New(DeliveryNote, &Options{
 		TextTypeInvoice: "FACTURE",
 		AutoPrint:       true,
 	})

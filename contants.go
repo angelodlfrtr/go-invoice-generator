@@ -1,19 +1,23 @@
 package generator
 
 // Types
-const INVOICE string = "INVOICE"
-const QUOTATION string = "QUOTATION"
-const DELIVERY_NOTE string = "DELIVERY_NOTE"
+
+const Invoice string = "INVOICE"
+const Quotation string = "QUOTATION"
+const DeliveryNote string = "DELIVERY_NOTE"
 
 // Margins
-const BASE_MARGIN float64 = 10
-const BASE_MARGIN_TOP float64 = 20
-const HEADER_MARGIN_TOP float64 = 5
 
-// COLORS
-var BASE_TEXT_COLOR = []int{35, 35, 35}
-var GREY_BG_COLOR = []int{232, 232, 232}
-var DARK_BG_COLOR = []int{212, 212, 212}
+const BaseMargin float64 = 10
+const BaseMarginTop float64 = 20
+const HeaderMarginTop float64 = 5
 
-// SIZES
-const MAX_PAGE_HEIGHT float64 = 260
+// Colors
+
+var BaseTextColor = []int{35, 35, 35}
+var GreyBgColor = []int{232, 232, 232}
+var DarkBgColor = []int{212, 212, 212}
+
+// Sizes
+
+const MaxPageHeight float64 = 260

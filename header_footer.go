@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+
 	"github.com/creasty/defaults"
 	"github.com/jung-kurt/gofpdf"
 )
@@ -25,16 +26,16 @@ func (hf *HeaderFooter) applyHeader(d *Document, pdf *gofpdf.Fpdf) error {
 		return err
 	}
 
-	if hf.UseCustomFunc == false {
+	if !hf.UseCustomFunc {
 		pdf.SetHeaderFunc(func() {
 			currentY := pdf.GetY()
 			currentX := pdf.GetX()
 
-			pdf.SetTopMargin(HEADER_MARGIN_TOP)
-			pdf.SetY(HEADER_MARGIN_TOP)
+			pdf.SetTopMargin(HeaderMarginTop)
+			pdf.SetY(HeaderMarginTop)
 
-			pdf.SetLeftMargin(BASE_MARGIN)
-			pdf.SetRightMargin(BASE_MARGIN)
+			pdf.SetLeftMargin(BaseMargin)
+			pdf.SetRightMargin(BaseMargin)
 
 			// Parse Text as html (simple)
 			pdf.SetFont("Helvetica", "", hf.FontSize)
@@ -43,16 +44,16 @@ func (hf *HeaderFooter) applyHeader(d *Document, pdf *gofpdf.Fpdf) error {
 			html.Write(lineHt, hf.Text)
 
 			// Apply pagination
-			if hf.Pagination == true {
+			if !hf.Pagination {
 				pdf.AliasNbPages("") // Will replace {nb} with total page count
-				pdf.SetY(HEADER_MARGIN_TOP + 8)
+				pdf.SetY(HeaderMarginTop + 8)
 				pdf.SetX(195)
 				pdf.CellFormat(10, 5, fmt.Sprintf("Page %d/{nb}", pdf.PageNo()), "0", 0, "R", false, 0, "")
 			}
 
 			pdf.SetY(currentY)
 			pdf.SetX(currentX)
-			pdf.SetMargins(BASE_MARGIN, BASE_MARGIN_TOP, BASE_MARGIN)
+			pdf.SetMargins(BaseMargin, BaseMarginTop, BaseMargin)
 		})
 	}
 
@@ -64,13 +65,13 @@ func (hf *HeaderFooter) applyFooter(d *Document, pdf *gofpdf.Fpdf) error {
 		return err
 	}
 
-	if hf.UseCustomFunc == false {
+	if !hf.UseCustomFunc {
 		pdf.SetFooterFunc(func() {
 			currentY := pdf.GetY()
 			currentX := pdf.GetX()
 
-			pdf.SetTopMargin(HEADER_MARGIN_TOP)
-			pdf.SetY(287 - HEADER_MARGIN_TOP)
+			pdf.SetTopMargin(HeaderMarginTop)
+			pdf.SetY(287 - HeaderMarginTop)
 
 			// Parse Text as html (simple)
 			pdf.SetFont("Helvetica", "", hf.FontSize)
@@ -79,16 +80,16 @@ func (hf *HeaderFooter) applyFooter(d *Document, pdf *gofpdf.Fpdf) error {
 			html.Write(lineHt, hf.Text)
 
 			// Apply pagination
-			if hf.Pagination == true {
+			if hf.Pagination {
 				pdf.AliasNbPages("") // Will replace {nb} with total page count
-				pdf.SetY(287 - HEADER_MARGIN_TOP - 8)
+				pdf.SetY(287 - HeaderMarginTop - 8)
 				pdf.SetX(195)
 				pdf.CellFormat(10, 5, fmt.Sprintf("Page %d/{nb}", pdf.PageNo()), "0", 0, "R", false, 0, "")
 			}
 
 			pdf.SetY(currentY)
 			pdf.SetX(currentX)
-			pdf.SetMargins(BASE_MARGIN, BASE_MARGIN_TOP, BASE_MARGIN)
+			pdf.SetMargins(BaseMargin, BaseMarginTop, BaseMargin)
 		})
 	}
 
