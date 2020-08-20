@@ -4,6 +4,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// Tax define tax as percent or fixed amount
 type Tax struct {
 	Percent string // Tax in percent ex 17
 	Amount  string // Tax in amount ex 123.40

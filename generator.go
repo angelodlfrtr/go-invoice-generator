@@ -5,6 +5,7 @@ import (
 	"github.com/creasty/defaults"
 )
 
+// New return a new documents with provided types and defaults
 func New(docType string, options *Options) (*Document, error) {
 	if err := defaults.Set(options); err != nil {
 		return nil, err

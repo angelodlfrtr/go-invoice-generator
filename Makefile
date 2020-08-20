@@ -1,0 +1,16 @@
+lint:
+	golint ./...
+	staticcheck ./...
+
+vet:
+	go vet ./...
+
+test:
+	go test -count 1 ./...
+
+testwithcover:
+	go test -count 1 --coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+
+clean:
+	rm coverage.out

@@ -1,5 +1,6 @@
 package generator
 
+// Options for Document
 type Options struct {
 	AutoPrint bool
 

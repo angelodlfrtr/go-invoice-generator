@@ -1,5 +1,6 @@
 package generator
 
+// Address represent an address
 type Address struct {
 	Address    string `validate:"required" json:"address"`
 	Address2   string `json:"address2"`

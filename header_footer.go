@@ -7,6 +7,7 @@ import (
 	"github.com/jung-kurt/gofpdf"
 )
 
+// HeaderFooter define header or footer informations on document
 type HeaderFooter struct {
 	UseCustomFunc bool
 	Text          string

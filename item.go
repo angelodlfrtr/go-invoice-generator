@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// Item represent a 'product' or a 'service'
 type Item struct {
 	Name        string `validate:"required"`
 	Description string
