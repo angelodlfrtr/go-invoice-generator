@@ -22,29 +22,38 @@ go get -u github.com/angelodlfrtr/go-invoice-generator
 package main
 
 import (
-  generator "github.com/angelodlfrtr/go-invoice-generator"
+	"log"
+
+	generator "github.com/angelodlfrtr/go-invoice-generator"
 )
 
 func main() {
-	doc := generator.New(generator.INVOICE, &generator.Options{})
+	doc, _ := generator.New(generator.Invoice, &generator.Options{
+		TextTypeInvoice: "FACTURE",
+		AutoPrint:       true,
+	})
 
 	doc.SetHeader(&generator.HeaderFooter{
-		Text: "Some header text",
+		Text:       "<center>Cupcake ipsum dolor sit amet bonbon. I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder.</center>",
+		Pagination: true,
 	})
 
 	doc.SetFooter(&generator.HeaderFooter{
-		Text:           "<center>Some footer text</center>",
-		Pagination:     true,
+		Text:       "<center>Cupcake ipsum dolor sit amet bonbon. I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder.</center>",
+		Pagination: true,
 	})
 
-	doc.SetNumber("testnumber")
-	doc.SetVersion("test version")
+	doc.SetRef("testref")
+	doc.SetVersion("someversion")
 
-	doc.SetDescription("Some text describing document")
+	doc.SetDescription("A description")
+	doc.SetNotes("Cupcake ipsum dolor sit amet. I love carrot cake sugar plum muffin jelly liquorice ice cream. Tootsie roll tootsie roll lemon drops oat cake liquorice.")
+
+	doc.SetDate("23/12/1992")
+	doc.SetPaymentTerm("23/12/1992")
 
 	doc.SetCompany(&generator.Contact{
 		Name: "Test Company",
-		Logo: []byte{}, // Image as byte array, supported format: png, jpeg, gif
 		Address: &generator.Address{
 			Address:    "89 Rue de Brest",
 			Address2:   "Appartement 2",
@@ -64,37 +73,27 @@ func main() {
 		},
 	})
 
-	doc.AppendItem(&generator.Item{
-		Name:     "Item one",
-		UnitCost: "89",
-		Quantity: "2",
-		Tax: &generator.Tax{
-			Percent: "20",
-		},
-	})
-
-	doc.AppendItem(&generator.Item{
-		Name:     "Item two",
-		UnitCost: "5.89",
-		Quantity: "11",
-		Tax: &generator.Tax{
-			Amount: "10",
-		},
-	})
+	for i := 0; i < 10; i++ {
+		doc.AppendItem(&generator.Item{
+			Name:     "Test",
+			UnitCost: "99876.89",
+			Quantity: "2",
+			Tax: &generator.Tax{
+				Percent: "20",
+			},
+		})
+	}
 
 	pdf, err := doc.Build()
 
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Fatal(err)
 	}
 
-	err = pdf.OutputFileAndClose("./out.pdf")
-
-	if err != nil {
-		fmt.Println(err.Error())
+	if err := pdf.OutputFileAndClose("out.pdf"); err != nil {
+		log.Fatal(err)
 	}
 }
-
 ```
 
 ## License

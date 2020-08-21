@@ -13,4 +13,4 @@ testwithcover:
 	go tool cover -func=coverage.out
 
 clean:
-	rm coverage.out
+	rm -Rf coverage.out
