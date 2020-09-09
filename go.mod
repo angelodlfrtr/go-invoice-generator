@@ -10,7 +10,10 @@ require (
 	github.com/jung-kurt/gofpdf v1.1.0
 	github.com/leekchan/accounting v0.0.0-20180703100437-18a1925d6514
 	github.com/leodido/go-urn v1.1.0 // indirect
+	github.com/lib/pq v1.8.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
+	github.com/stretchr/testify v1.6.1 // indirect
+	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
 	gopkg.in/go-playground/validator.v9 v9.28.0
 )

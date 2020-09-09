@@ -196,20 +196,20 @@ func (d *Document) appendTitle(pdf *gofpdf.Fpdf) {
 
 	// Draw text
 	pdf.SetFont("Helvetica", "", 14)
-	pdf.CellFormat(80, 10, title, "0", 0, "C", false, 0, "")
+	pdf.CellFormat(80, 10, encodeString(title), "0", 0, "C", false, 0, "")
 }
 
 func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 	// Append ref
-	refString := fmt.Sprintf("%s: %s", d.Options.TextRefTitle, d.Ref)
+	refString := fmt.Sprintf("%s: %s", encodeString(d.Options.TextRefTitle), d.Ref)
 
 	pdf.SetXY(120, BaseMarginTop+11)
 	pdf.SetFont("Helvetica", "", 8)
-	pdf.CellFormat(80, 4, refString, "0", 0, "R", false, 0, "")
+	pdf.CellFormat(80, 4, encodeString(refString), "0", 0, "R", false, 0, "")
 
 	// Append version
 	if len(d.Version) > 0 {
-		versionString := fmt.Sprintf("%s: %s", d.Options.TextVersionTitle, d.Version)
+		versionString := fmt.Sprintf("%s: %s", encodeString(d.Options.TextVersionTitle), d.Version)
 		pdf.SetXY(120, BaseMarginTop+15)
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.CellFormat(80, 4, encodeString(versionString), "0", 0, "R", false, 0, "")
@@ -220,7 +220,7 @@ func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 	if len(d.Date) > 0 {
 		date = d.Date
 	}
-	dateString := fmt.Sprintf("%s: %s", d.Options.TextDateTitle, date)
+	dateString := fmt.Sprintf("%s: %s", encodeString(d.Options.TextDateTitle), date)
 	pdf.SetXY(120, BaseMarginTop+19)
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.CellFormat(80, 4, encodeString(dateString), "0", 0, "R", false, 0, "")
