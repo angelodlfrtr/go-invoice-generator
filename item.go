@@ -15,10 +15,7 @@ type Item struct {
 	UnitCost    string
 	Quantity    string
 	Tax         *Tax
-	Discount    map[string]struct {
-		Percent string // Discount in percent OR
-		Amount  string // Discount in amount
-	}
+	Discount    *Discount
 }
 
 func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
