@@ -10,7 +10,7 @@ import (
 
 // Contact contact a company informations
 type Contact struct {
-	Name    string  `validate:"required,min=1,max=64"`
+	Name    string  `validate:"required,min=1,max=256"`
 	Logo    *[]byte // Logo byte array
 	Address *Address
 }

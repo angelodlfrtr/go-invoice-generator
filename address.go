@@ -4,8 +4,8 @@ package generator
 type Address struct {
 	Address    string `validate:"required" json:"address"`
 	Address2   string `json:"address2"`
-	PostalCode string `validate:"required" json:"postalCode"`
-	City       string `validate:"required" json:"city"`
+	PostalCode string `json:"postalCode"`
+	City       string `json:"city"`
 	Country    string `json:"country"`
 }
 
@@ -19,10 +19,17 @@ func (a *Address) ToString() string {
 		addrString += a.Address2
 	}
 
-	addrString += "\n"
-	addrString += a.PostalCode
-	addrString += " "
-	addrString += a.City
+	if len(a.PostalCode) > 0 {
+		addrString += "\n"
+		addrString += a.PostalCode
+	} else {
+		addrString += "\n"
+	}
+
+	if len(a.City) > 0 {
+		addrString += " "
+		addrString += a.City
+	}
 
 	if len(a.Country) > 0 {
 		addrString += "\n"
