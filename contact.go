@@ -1,9 +1,11 @@
 package generator
 
 import (
+	"bufio"
 	"bytes"
 	b64 "encoding/base64"
 	"image"
+	"os"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -89,4 +91,32 @@ func (c *Contact) appendCompanyContactToDoc(pdf *gofpdf.Fpdf) float64 {
 
 func (c *Contact) appendCustomerContactToDoc(pdf *gofpdf.Fpdf) float64 {
 	return c.appendContactTODoc(130, BaseMarginTop+25, true, "R", pdf)
+}
+
+// ImageToBytes converts a picture into a byte[] when the
+// relative path is passed as an parameter.
+func ImageToBytes(logo string) ([]byte, error) {
+
+	// Relative Path
+	file, err := os.Open(logo)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer file.Close()
+
+	fileInfo, _ := file.Stat()
+	size := fileInfo.Size()
+	logoBytes := make([]byte, size)
+
+	// read file into bytes
+	buffer := bufio.NewReader(file)
+	_, err = buffer.Read(logoBytes)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return logoBytes, nil
 }
