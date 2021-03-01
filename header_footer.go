@@ -9,10 +9,10 @@ import (
 
 // HeaderFooter define header or footer informations on document
 type HeaderFooter struct {
-	UseCustomFunc bool
-	Text          string
-	FontSize      float64 `default:"7"`
-	Pagination    bool
+	UseCustomFunc bool    `json:"-"`
+	Text          string  `json:"text,omitempty"`
+	FontSize      float64 `json:"font_size,omitempty" default:"7"`
+	Pagination    bool    `json:"pagination,omitempty"`
 }
 
 type fnc func()

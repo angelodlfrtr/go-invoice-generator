@@ -2,11 +2,11 @@ package generator
 
 // Address represent an address
 type Address struct {
-	Address    string `validate:"required" json:"address"`
-	Address2   string `json:"address2"`
-	PostalCode string `json:"postalCode"`
-	City       string `json:"city"`
-	Country    string `json:"country"`
+	Address    string `json:"address,omitempty" validate:"required"`
+	Address2   string `json:"address_2,omitempty"`
+	PostalCode string `json:"postal_code,omitempty"`
+	City       string `json:"city,omitempty"`
+	Country    string `json:"country,omitempty"`
 }
 
 // ToString output address as string

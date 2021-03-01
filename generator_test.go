@@ -26,7 +26,7 @@ func TestNew(t *testing.T) {
 	doc.SetVersion("someversion")
 
 	doc.SetDescription("A description")
-	doc.SetNotes("Des notes des nores sdqd qsd qsd sqd fgh fgh fg df  rty rty rty rty rty rty rty rty rty rty try rty rty rty try rty rt yrt yrty rty rty rty rty rty !")
+	doc.SetNotes("I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! ")
 
 	doc.SetDate("23/12/1992")
 	doc.SetPaymentTerm("23/12/1992")
@@ -57,7 +57,7 @@ func TestNew(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		doc.AppendItem(&Item{
-			Name:     "Test",
+			Name:     "Cupcake ipsum dolor sit amet bonbon.",
 			UnitCost: "99876.89",
 			Quantity: "2",
 			Tax: &Tax{
@@ -65,6 +65,27 @@ func TestNew(t *testing.T) {
 			},
 		})
 	}
+
+	doc.AppendItem(&Item{
+		Name:     "Test",
+		UnitCost: "99876.89",
+		Quantity: "2",
+		Tax: &Tax{
+			Amount: "89",
+		},
+		Discount: &Discount{
+			Percent: "30",
+		},
+	})
+
+	doc.AppendItem(&Item{
+		Name:     "Test",
+		UnitCost: "99876.89",
+		Quantity: "2",
+		Discount: &Discount{
+			Percent: "50",
+		},
+	})
 
 	pdf, err := doc.Build()
 	if err != nil {
@@ -123,16 +144,37 @@ func ExampleNew() {
 		},
 	})
 
-	for i := 0; i < 15; i++ {
-		doc.AppendItem(&Item{
-			Name:     "Test",
-			UnitCost: "99876.89",
-			Quantity: "2",
-			Tax: &Tax{
-				Percent: "20",
-			},
-		})
-	}
+	// for i := 0; i < 10; i++ {
+	// doc.AppendItem(&Item{
+	// Name:     "Test",
+	// UnitCost: "99876.89",
+	// Quantity: "2",
+	// Tax: &Tax{
+	// Percent: "20",
+	// },
+	// })
+	// }
+
+	doc.AppendItem(&Item{
+		Name:     "Test",
+		UnitCost: "99876.89",
+		Quantity: "2",
+		Tax: &Tax{
+			Amount: "89",
+		},
+		Discount: &Discount{
+			Amount: "89",
+		},
+	})
+
+	doc.AppendItem(&Item{
+		Name:     "Test",
+		UnitCost: "99876.89",
+		Quantity: "2",
+		Discount: &Discount{
+			Percent: "50",
+		},
+	})
 
 	pdf, err := doc.Build()
 	if err != nil {

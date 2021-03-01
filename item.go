@@ -10,12 +10,12 @@ import (
 
 // Item represent a 'product' or a 'service'
 type Item struct {
-	Name        string `validate:"required"`
-	Description string
-	UnitCost    string
-	Quantity    string
-	Tax         *Tax
-	Discount    *Discount
+	Name        string    `json:"name,omitempty" validate:"required"`
+	Description string    `json:"description,omitempty"`
+	UnitCost    string    `json:"unit_cost,omitempty"`
+	Quantity    string    `json:"quantity,omitempty"`
+	Tax         *Tax      `json:"tax,omitempty"`
+	Discount    *Discount `json:"discount,omitempty"`
 }
 
 func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
@@ -42,12 +42,16 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(20, 6, ac.FormatMoneyDecimal(i.totalHT()), "0", 0, "", false, 0, "")
 
 	// Tax
-	taxType, taxAmount := i.Tax.getTax()
 	var taxString string
-	if taxType == "percent" {
-		taxString = fmt.Sprintf("%s %s", taxAmount, encodeString("%"))
+	if i.Tax != nil {
+		taxType, taxAmount := i.Tax.getTax()
+		if taxType == "percent" {
+			taxString = fmt.Sprintf("%s %s", taxAmount, encodeString("%"))
+		} else {
+			taxString = fmt.Sprintf("%s %s", taxAmount, encodeString("€"))
+		}
 	} else {
-		taxString = fmt.Sprintf("%s %s", taxAmount, encodeString("€"))
+		taxString = "--"
 	}
 
 	pdf.SetX(155)
@@ -55,7 +59,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 
 	// TOTAL TTC
 	pdf.SetX(175)
-	pdf.CellFormat(25, 6, ac.FormatMoneyDecimal(i.totalTTC()), "0", 0, "", false, 0, "")
+	pdf.CellFormat(25, 6, ac.FormatMoneyDecimal(i.totalTTC(nil)), "0", 0, "", false, 0, "")
 }
 
 func (i *Item) unitCost() decimal.Decimal {
@@ -71,19 +75,42 @@ func (i *Item) quantity() decimal.Decimal {
 func (i *Item) totalHT() decimal.Decimal {
 	quantity, _ := decimal.NewFromString(i.Quantity)
 	price, _ := decimal.NewFromString(i.UnitCost)
+	total := price.Mul(quantity)
 
-	return price.Mul(quantity)
+	// Check discount
+	if i.Discount != nil {
+		dType, dNum := i.Discount.getDiscount()
+
+		if dType == "amount" {
+			total = total.Sub(dNum)
+		} else {
+			// Percent
+			toSub := total.Mul(dNum.Div(decimal.NewFromFloat(100)))
+			total = total.Sub(toSub)
+		}
+	}
+
+	return total
 }
 
-func (i *Item) totalTTC() decimal.Decimal {
+func (i *Item) totalTTC(parentTax *Tax) decimal.Decimal {
 	totalHT := i.totalHT()
-	taxType, taxAmount := i.Tax.getTax()
-	var totalTTC decimal.Decimal
+	totalTTC := totalHT
+	taxToUse := i.Tax
 
+	if taxToUse == nil {
+		taxToUse = parentTax
+	}
+
+	if taxToUse == nil {
+		return totalTTC
+	}
+
+	taxType, taxAmount := taxToUse.getTax()
 	if taxType == "amount" {
 		totalTTC = totalHT.Add(taxAmount)
 	} else {
-		divider, _ := decimal.NewFromString("100")
+		divider := decimal.NewFromFloat(100)
 		tax := totalHT.Mul(taxAmount.Div(divider))
 		totalTTC = totalHT.Add(tax)
 	}

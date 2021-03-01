@@ -6,13 +6,13 @@ import (
 
 // Discount define discount as percent or fixed amount
 type Discount struct {
-	Percent string // Discount in percent ex 17
-	Amount  string // Discount in amount ex 123.40
+	Percent string `json:"percent,omitempty"` // Discount in percent ex 17
+	Amount  string `json:"amount,omitempty"`  // Discount in amount ex 123.40
 }
 
-func (t *Tax) getDiscount() (string, decimal.Decimal) {
-	var tax string
-	var taxType string = "percent"
+func (t *Discount) getDiscount() (string, decimal.Decimal) {
+	tax := "0"
+	taxType := "percent"
 
 	if len(t.Percent) > 0 {
 		tax = t.Percent
