@@ -67,7 +67,6 @@ func TestNew(t *testing.T) {
 	}
 
 	pdf, err := doc.Build()
-
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -136,7 +135,6 @@ func ExampleNew() {
 	}
 
 	pdf, err := doc.Build()
-
 	if err != nil {
 		fmt.Println(err.Error())
 	}

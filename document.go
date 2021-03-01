@@ -32,7 +32,6 @@ type Document struct {
 func (d *Document) Build() (*gofpdf.Fpdf, error) {
 	// Validate document data
 	err := d.Validate()
-
 	if err != nil {
 		return nil, err
 	}
