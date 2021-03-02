@@ -10,9 +10,9 @@ import (
 
 // Contact contact a company informations
 type Contact struct {
-	Name    string  `validate:"required,min=1,max=256"`
-	Logo    *[]byte // Logo byte array
-	Address *Address
+	Name    string   `json:"name,omitempty" validate:"required,min=1,max=256"`
+	Logo    *[]byte  `json:"logo,omitempty"` // Logo byte array
+	Address *Address `json:"address,omitempty"`
 }
 
 func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign string, pdf *gofpdf.Fpdf) float64 {
