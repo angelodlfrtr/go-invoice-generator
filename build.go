@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -70,6 +71,15 @@ func (d *Document) Build() (*gofpdf.Fpdf, error) {
 
 	// Append items
 	d.appendItems(pdf)
+
+	// Check page height (total bloc height = 30, 45 when doc discount)
+	offset := pdf.GetY() + 30
+	if d.Discount != nil {
+		offset += 15
+	}
+	if offset > MaxPageHeight {
+		pdf.AddPage()
+	}
 
 	// Append notes
 	d.appendNotes(pdf)
@@ -148,39 +158,111 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	pdf.Rect(10, pdf.GetY(), 190, 6, "F")
 
-	// Description
-	pdf.CellFormat(80, 6, encodeString(d.Options.TextItemsDescriptionTitle), "0", 0, "", false, 0, "")
+	// Name
+	pdf.SetX(ItemColNameOffset)
+	pdf.CellFormat(
+		ItemColUnitPriceOffset-ItemColNameOffset,
+		6,
+		encodeString(d.Options.TextItemsNameTitle),
+		"0",
+		0,
+		"",
+		false,
+		0,
+		"",
+	)
 
 	// Unit price
-	pdf.SetX(90)
-	pdf.CellFormat(30, 6, encodeString(d.Options.TextItemsUnitCostTitle), "0", 0, "", false, 0, "")
+	pdf.SetX(ItemColUnitPriceOffset)
+	pdf.CellFormat(
+		ItemColQuantityOffset-ItemColUnitPriceOffset,
+		6,
+		encodeString(d.Options.TextItemsUnitCostTitle),
+		"0",
+		0,
+		"",
+		false,
+		0,
+		"",
+	)
 
 	// Quantity
-	pdf.SetX(120)
-	pdf.CellFormat(15, 6, encodeString(d.Options.TextItemsQuantityTitle), "0", 0, "", false, 0, "")
+	pdf.SetX(ItemColQuantityOffset)
+	pdf.CellFormat(
+		ItemColTaxOffset-ItemColQuantityOffset,
+		6,
+		encodeString(d.Options.TextItemsQuantityTitle),
+		"0",
+		0,
+		"",
+		false,
+		0,
+		"",
+	)
 
 	// Total HT
-	pdf.SetX(135)
-	pdf.CellFormat(20, 6, encodeString(d.Options.TextItemsTotalHTTitle), "0", 0, "", false, 0, "")
+	pdf.SetX(ItemColTotalHTOffset)
+	pdf.CellFormat(
+		ItemColTaxOffset-ItemColTotalHTOffset,
+		6,
+		encodeString(d.Options.TextItemsTotalHTTitle),
+		"0",
+		0,
+		"",
+		false,
+		0,
+		"",
+	)
 
 	// Tax
-	pdf.SetX(155)
-	pdf.CellFormat(20, 6, encodeString(d.Options.TextItemsTaxTitle), "0", 0, "", false, 0, "")
+	pdf.SetX(ItemColTaxOffset)
+	pdf.CellFormat(
+		ItemColDiscountOffset-ItemColTaxOffset,
+		6,
+		encodeString(d.Options.TextItemsTaxTitle),
+		"0",
+		0,
+		"",
+		false,
+		0,
+		"",
+	)
+
+	// Discount
+	pdf.SetX(ItemColDiscountOffset)
+	pdf.CellFormat(
+		ItemColTotalTTCOffset-ItemColDiscountOffset,
+		6,
+		encodeString(d.Options.TextItemsDiscountTitle),
+		"0",
+		0,
+		"",
+		false,
+		0,
+		"",
+	)
 
 	// TOTAL TTC
-	pdf.SetX(175)
-	pdf.CellFormat(25, 6, encodeString(d.Options.TextItemsTotalTTCTitle), "0", 0, "", false, 0, "")
+	pdf.SetX(ItemColTotalTTCOffset)
+	pdf.CellFormat(190-ItemColTotalTTCOffset, 6, encodeString(d.Options.TextItemsTotalTTCTitle), "0", 0, "", false, 0, "")
 }
 
 func (d *Document) appendItems(pdf *gofpdf.Fpdf) {
 	d.drawsTableTitles(pdf)
 
 	pdf.SetX(10)
-	pdf.SetY(pdf.GetY() + 6)
+	pdf.SetY(pdf.GetY() + 8)
 	pdf.SetFont("Helvetica", "", 8)
 
 	for i := 0; i < len(d.Items); i++ {
 		item := d.Items[i]
+
+		// Check item tax
+		if item.Tax == nil {
+			item.Tax = d.DefaultTax
+		}
+
+		// Append to pdf
 		item.appendColTo(d.Options, pdf)
 
 		if pdf.GetY() > MaxPageHeight {
@@ -201,11 +283,6 @@ func (d *Document) appendNotes(pdf *gofpdf.Fpdf) {
 	}
 
 	currentY := pdf.GetY()
-
-	if currentY+30 > MaxPageHeight {
-		pdf.AddPage()
-		currentY = pdf.GetY()
-	}
 
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetX(BaseMargin)
@@ -228,25 +305,71 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 		Decimal:   d.Options.CurrencyDecimal,
 	}
 
-	// Get total HT & totalTTC
-	totalHT, _ := decimal.NewFromString("0")
-	totalTTC, _ := decimal.NewFromString("0")
+	// Get total (without tax)
+	total, _ := decimal.NewFromString("0")
 
-	for i := 0; i < len(d.Items); i++ {
-		item := d.Items[i]
-		totalHT = totalHT.Add(item.totalHT())
-		totalTTC = totalTTC.Add(item.totalTTC(d.Tax))
+	for _, item := range d.Items {
+		total = total.Add(item.totalWithoutTaxAndWithDiscount())
 	}
 
-	totalTax := totalTTC.Sub(totalHT)
+	// Apply document discount
+	totalWithDiscount := decimal.NewFromFloat(0)
+	if d.Discount != nil {
+		discountType, discountNumber := d.Discount.getDiscount()
 
-	// Check page height (total bloc height = 30) // @TOOD: include discount
-	if pdf.GetY()+30 > MaxPageHeight {
-		pdf.AddPage()
+		if discountType == "amount" {
+			totalWithDiscount = total.Sub(discountNumber)
+		} else {
+			// Percent
+			toSub := total.Mul(discountNumber.Div(decimal.NewFromFloat(100)))
+			totalWithDiscount = total.Sub(toSub)
+		}
+	}
+
+	// Tax
+	totalTax := decimal.NewFromFloat(0)
+	if d.Discount == nil {
+		for _, item := range d.Items {
+			totalTax = totalTax.Add(item.taxWithDiscount())
+		}
+	} else {
+		discountType, discountAmount := d.Discount.getDiscount()
+		discountPercent := discountAmount
+		if discountType == "amount" {
+			// Get percent from total discounted
+			discountPercent = discountAmount.Mul(decimal.NewFromFloat(100)).Div(totalWithDiscount)
+		}
+
+		for _, item := range d.Items {
+			if item.Tax != nil {
+				taxType, taxAmount := item.Tax.getTax()
+				if taxType == "amount" {
+					// If tax type is amount, juste add amount to tax
+					totalTax = totalTax.Add(taxAmount)
+				} else {
+					// Else, remove doc discount % from item total without tax and item discount
+					itemTotal := item.totalWithoutTaxAndWithDiscount()
+					toSub := discountPercent.Mul(itemTotal).Div(decimal.NewFromFloat(100))
+					itemTotalDiscounted := itemTotal.Sub(toSub)
+
+					// Then recompute tax on itemTotalDiscounted
+					itemTaxDiscounted := taxAmount.Mul(itemTotalDiscounted).Div(decimal.NewFromFloat(100))
+
+					totalTax = totalTax.Add(itemTaxDiscounted)
+				}
+			}
+		}
+	}
+
+	// finalTotal
+	totalWithTax := total.Add(totalTax)
+	if d.Discount != nil {
+		totalWithTax = totalWithDiscount.Add(totalTax)
 	}
 
 	pdf.SetY(pdf.GetY() + 10)
-	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetFont("Helvetica", "", LargeTextFontSize)
+	pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 
 	// Draw TOTAL HT title
 	pdf.SetX(120)
@@ -258,23 +381,56 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 	pdf.SetX(162)
 	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	pdf.Rect(160, pdf.GetY(), 40, 10, "F")
-	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalHT), "0", 0, "L", false, 0, "")
+	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(total), "0", 0, "L", false, 0, "")
 
-	// Draw DISCOUNT title
-	pdf.SetY(pdf.GetY() + 10)
-	pdf.SetX(120)
-	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
-	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
-	pdf.CellFormat(38, 10, encodeString(d.Options.TextTotalDiscount), "0", 0, "R", false, 0, "")
+	if d.Discount != nil {
+		baseY := pdf.GetY() + 10
 
-	// Draw DISCOUNT amount
-	pdf.SetX(162)
-	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
-	pdf.Rect(160, pdf.GetY(), 40, 10, "F")
-	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalHT), "0", 0, "L", false, 0, "")
+		// Draw DISCOUNTED title
+		pdf.SetXY(120, baseY)
+		pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
+		pdf.Rect(120, pdf.GetY(), 40, 15, "F")
+
+		// title
+		pdf.CellFormat(38, 7.5, encodeString(d.Options.TextTotalDiscounted), "0", 0, "BR", false, 0, "")
+
+		// description
+		pdf.SetXY(120, baseY+7.5)
+		pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		pdf.SetTextColor(GreyTextColor[0], GreyTextColor[1], GreyTextColor[2])
+
+		var descString bytes.Buffer
+		discountType, discountAmount := d.Discount.getDiscount()
+		if discountType == "percent" {
+			descString.WriteString("-")
+			descString.WriteString(discountAmount.String())
+			descString.WriteString(" % / -")
+			descString.WriteString(ac.FormatMoneyDecimal(total.Sub(totalWithDiscount)))
+		} else {
+			descString.WriteString("-")
+			descString.WriteString(ac.FormatMoneyDecimal(discountAmount))
+			descString.WriteString(" / -")
+			descString.WriteString(discountAmount.Mul(decimal.NewFromFloat(100)).Div(total).StringFixed(2))
+			descString.WriteString(" %")
+		}
+
+		pdf.CellFormat(38, 7.5, descString.String(), "0", 0, "TR", false, 0, "")
+
+		pdf.SetFont("Helvetica", "", LargeTextFontSize)
+		pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
+
+		// Draw DISCOUNT amount
+		pdf.SetY(baseY)
+		pdf.SetX(162)
+		pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
+		pdf.Rect(160, pdf.GetY(), 40, 15, "F")
+		pdf.CellFormat(40, 15, ac.FormatMoneyDecimal(totalWithDiscount), "0", 0, "L", false, 0, "")
+		pdf.SetY(pdf.GetY() + 15)
+	} else {
+		pdf.SetY(pdf.GetY() + 10)
+	}
 
 	// Draw TAX title
-	pdf.SetY(pdf.GetY() + 10)
 	pdf.SetX(120)
 	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
 	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
@@ -297,7 +453,7 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 	pdf.SetX(162)
 	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
 	pdf.Rect(160, pdf.GetY(), 40, 10, "F")
-	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalTTC), "0", 0, "L", false, 0, "")
+	pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalWithTax), "0", 0, "L", false, 0, "")
 }
 
 func (d *Document) appendPaymentTerm(pdf *gofpdf.Fpdf) {

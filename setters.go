@@ -72,8 +72,14 @@ func (d *Document) SetPaymentTerm(term string) *Document {
 	return d
 }
 
-// SetTax of document
-func (d *Document) SetTax(tax *Tax) *Document {
-	d.Tax = tax
+// SetDefaultTax of document
+func (d *Document) SetDefaultTax(tax *Tax) *Document {
+	d.DefaultTax = tax
+	return d
+}
+
+// SetDiscount of document
+func (d *Document) SetDiscount(discount *Discount) *Document {
+	d.Discount = discount
 	return d
 }
