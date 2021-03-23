@@ -291,7 +291,7 @@ func (d *Document) appendNotes(pdf *gofpdf.Fpdf) {
 
 	_, lineHt := pdf.GetFontSize()
 	html := pdf.HTMLBasicNew()
-	html.Write(lineHt, d.Notes)
+	html.Write(lineHt, encodeString(d.Notes))
 
 	pdf.SetRightMargin(BaseMargin)
 	pdf.SetY(currentY)
