@@ -1,4 +1,4 @@
-module github.com/angelodlfrtr/go-invoice-generator
+module github.com/AlekseiSolonkov/go-invoice-generator
 
 go 1.12
 
