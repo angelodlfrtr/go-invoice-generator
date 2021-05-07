@@ -1,13 +1,16 @@
 package generator
 
-import (
-	"github.com/jung-kurt/gofpdf"
-)
+import "github.com/jung-kurt/gofpdf"
+
+var trFunc func(string) string
 
 func encodeString(str string) string {
-	pdf := gofpdf.New("P", "mm", "A4", "")
-	tr := pdf.UnicodeTranslatorFromDescriptor("")
-	return tr(str)
+	if trFunc == nil {
+		pdf := gofpdf.New("P", "mm", "A4", "")
+		trFunc = pdf.UnicodeTranslatorFromDescriptor("")
+	}
+
+	return trFunc(str)
 }
 
 func (d *Document) typeAsString() string {

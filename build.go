@@ -19,14 +19,13 @@ func (d *Document) Build() (*gofpdf.Fpdf, error) {
 	}
 
 	// Build base doc
-	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.SetMargins(BaseMargin, BaseMarginTop, BaseMargin)
-	pdf.SetXY(10, 10)
-	pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
+	d.pdf.SetMargins(BaseMargin, BaseMarginTop, BaseMargin)
+	d.pdf.SetXY(10, 10)
+	d.pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 
 	// Set header
 	if d.Header != nil {
-		err = d.Header.applyHeader(d, pdf)
+		err = d.Header.applyHeader(d, d.pdf)
 
 		if err != nil {
 			return nil, err
@@ -35,7 +34,7 @@ func (d *Document) Build() (*gofpdf.Fpdf, error) {
 
 	// Set footer
 	if d.Footer != nil {
-		err = d.Footer.applyFooter(d, pdf)
+		err = d.Footer.applyFooter(d, d.pdf)
 
 		if err != nil {
 			return nil, err
@@ -43,59 +42,59 @@ func (d *Document) Build() (*gofpdf.Fpdf, error) {
 	}
 
 	// Add first page
-	pdf.AddPage()
+	d.pdf.AddPage()
 
 	// Load font
-	pdf.SetFont("Helvetica", "", 12)
+	d.pdf.SetFont("Helvetica", "", 12)
 
 	// Appenf document title
-	d.appendTitle(pdf)
+	d.appendTitle(d.pdf)
 
 	// Appenf document metas (ref & version)
-	d.appendMetas(pdf)
+	d.appendMetas(d.pdf)
 
 	// Append company contact to doc
-	companyBottom := d.Company.appendCompanyContactToDoc(pdf)
+	companyBottom := d.Company.appendCompanyContactToDoc(d.pdf)
 
 	// Append customer contact to doc
-	customerBottom := d.Customer.appendCustomerContactToDoc(pdf)
+	customerBottom := d.Customer.appendCustomerContactToDoc(d.pdf)
 
 	if customerBottom > companyBottom {
-		pdf.SetXY(10, customerBottom)
+		d.pdf.SetXY(10, customerBottom)
 	} else {
-		pdf.SetXY(10, companyBottom)
+		d.pdf.SetXY(10, companyBottom)
 	}
 
 	// Append description
-	d.appendDescription(pdf)
+	d.appendDescription(d.pdf)
 
 	// Append items
-	d.appendItems(pdf)
+	d.appendItems(d.pdf)
 
 	// Check page height (total bloc height = 30, 45 when doc discount)
-	offset := pdf.GetY() + 30
+	offset := d.pdf.GetY() + 30
 	if d.Discount != nil {
 		offset += 15
 	}
 	if offset > MaxPageHeight {
-		pdf.AddPage()
+		d.pdf.AddPage()
 	}
 
 	// Append notes
-	d.appendNotes(pdf)
+	d.appendNotes(d.pdf)
 
 	// Append total
-	d.appendTotal(pdf)
+	d.appendTotal(d.pdf)
 
 	// Append payment term
-	d.appendPaymentTerm(pdf)
+	d.appendPaymentTerm(d.pdf)
 
 	// Append js to autoprint if AutoPrint == true
 	if d.Options.AutoPrint {
-		pdf.SetJavascript("print(true);")
+		d.pdf.SetJavascript("print(true);")
 	}
 
-	return pdf, nil
+	return d.pdf, nil
 }
 
 func (d *Document) appendTitle(pdf *gofpdf.Fpdf) {
@@ -115,7 +114,7 @@ func (d *Document) appendTitle(pdf *gofpdf.Fpdf) {
 
 func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 	// Append ref
-	refString := fmt.Sprintf("%s: %s", encodeString(d.Options.TextRefTitle), d.Ref)
+	refString := fmt.Sprintf("%s: %s", d.Options.TextRefTitle, d.Ref)
 
 	pdf.SetXY(120, BaseMarginTop+11)
 	pdf.SetFont("Helvetica", "", 8)
@@ -123,7 +122,7 @@ func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 
 	// Append version
 	if len(d.Version) > 0 {
-		versionString := fmt.Sprintf("%s: %s", encodeString(d.Options.TextVersionTitle), d.Version)
+		versionString := fmt.Sprintf("%s: %s", d.Options.TextVersionTitle, d.Version)
 		pdf.SetXY(120, BaseMarginTop+15)
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.CellFormat(80, 4, encodeString(versionString), "0", 0, "R", false, 0, "")
@@ -134,7 +133,7 @@ func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 	if len(d.Date) > 0 {
 		date = d.Date
 	}
-	dateString := fmt.Sprintf("%s: %s", encodeString(d.Options.TextDateTitle), date)
+	dateString := fmt.Sprintf("%s: %s", d.Options.TextDateTitle, date)
 	pdf.SetXY(120, BaseMarginTop+19)
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.CellFormat(80, 4, encodeString(dateString), "0", 0, "R", false, 0, "")

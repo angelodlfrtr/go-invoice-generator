@@ -8,6 +8,7 @@ import (
 func TestNew(t *testing.T) {
 	doc, _ := New(Invoice, &Options{
 		TextTypeInvoice: "FACTURE",
+		TextRefTitle:    "Réàf.",
 		AutoPrint:       true,
 	})
 
@@ -21,10 +22,10 @@ func TestNew(t *testing.T) {
 		Pagination: true,
 	})
 
-	doc.SetRef("testref")
+	doc.SetRef("testràf")
 	doc.SetVersion("someversion")
 
-	doc.SetDescription("A description")
+	doc.SetDescription("A description àç")
 	doc.SetNotes("I léove croissant cotton candy. Carrot cake sweet Ià love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! ")
 
 	doc.SetDate("02/03/2021")

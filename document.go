@@ -1,7 +1,11 @@
 package generator
 
+import "github.com/jung-kurt/gofpdf"
+
 // Document define base document
 type Document struct {
+	pdf *gofpdf.Fpdf
+
 	Options      *Options      `json:"options,omitempty"`
 	Header       *HeaderFooter `json:"header,omitempty"`
 	Footer       *HeaderFooter `json:"footer,omitempty"`

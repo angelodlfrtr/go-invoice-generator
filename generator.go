@@ -3,6 +3,7 @@ package generator
 
 import (
 	"github.com/creasty/defaults"
+	"github.com/jung-kurt/gofpdf"
 )
 
 // New return a new documents with provided types and defaults
@@ -15,6 +16,8 @@ func New(docType string, options *Options) (*Document, error) {
 		Options: options,
 		Type:    docType,
 	}
+
+	doc.pdf = gofpdf.New("P", "mm", "A4", "")
 
 	return doc, nil
 }
