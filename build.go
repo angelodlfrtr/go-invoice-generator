@@ -45,7 +45,7 @@ func (d *Document) Build() (*gofpdf.Fpdf, error) {
 	d.pdf.AddPage()
 
 	// Load font
-	d.pdf.SetFont("Helvetica", "", 12)
+	d.pdf.SetFont("dejavu", "", 12)
 
 	// Appenf document title
 	d.appendTitle(d.pdf)
@@ -108,8 +108,8 @@ func (d *Document) appendTitle(pdf *gofpdf.Fpdf) {
 	pdf.Rect(120, BaseMarginTop, 80, 10, "F")
 
 	// Draw text
-	pdf.SetFont("Helvetica", "", 14)
-	pdf.CellFormat(80, 10, encodeString(title), "0", 0, "C", false, 0, "")
+	pdf.SetFont("dejavu", "", 14)
+	pdf.CellFormat(80, 10, title, "0", 0, "C", false, 0, "")
 }
 
 func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
@@ -117,15 +117,15 @@ func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 	refString := fmt.Sprintf("%s: %s", d.Options.TextRefTitle, d.Ref)
 
 	pdf.SetXY(120, BaseMarginTop+11)
-	pdf.SetFont("Helvetica", "", 8)
-	pdf.CellFormat(80, 4, encodeString(refString), "0", 0, "R", false, 0, "")
+	pdf.SetFont("dejavu", "", 8)
+	pdf.CellFormat(80, 4, refString, "0", 0, "R", false, 0, "")
 
 	// Append version
 	if len(d.Version) > 0 {
 		versionString := fmt.Sprintf("%s: %s", d.Options.TextVersionTitle, d.Version)
 		pdf.SetXY(120, BaseMarginTop+15)
-		pdf.SetFont("Helvetica", "", 8)
-		pdf.CellFormat(80, 4, encodeString(versionString), "0", 0, "R", false, 0, "")
+		pdf.SetFont("dejavu", "", 8)
+		pdf.CellFormat(80, 4,versionString, "0", 0, "R", false, 0, "")
 	}
 
 	// Append date
@@ -135,15 +135,15 @@ func (d *Document) appendMetas(pdf *gofpdf.Fpdf) {
 	}
 	dateString := fmt.Sprintf("%s: %s", d.Options.TextDateTitle, date)
 	pdf.SetXY(120, BaseMarginTop+19)
-	pdf.SetFont("Helvetica", "", 8)
-	pdf.CellFormat(80, 4, encodeString(dateString), "0", 0, "R", false, 0, "")
+	pdf.SetFont("dejavu", "", 8)
+	pdf.CellFormat(80, 4, dateString, "0", 0, "R", false, 0, "")
 }
 
 func (d *Document) appendDescription(pdf *gofpdf.Fpdf) {
 	if len(d.Description) > 0 {
 		pdf.SetY(pdf.GetY() + 10)
-		pdf.SetFont("Helvetica", "", 10)
-		pdf.MultiCell(190, 5, encodeString(d.Description), "B", "L", false)
+		pdf.SetFont("dejavu", "", 10)
+		pdf.MultiCell(190, 5, d.Description, "B", "L", false)
 	}
 }
 
@@ -151,7 +151,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	// Draw table titles
 	pdf.SetX(10)
 	pdf.SetY(pdf.GetY() + 5)
-	pdf.SetFont("Helvetica", "B", 8)
+	pdf.SetFont("dejavu", "", 8)
 
 	// Draw rec
 	pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
@@ -162,7 +162,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(
 		ItemColUnitPriceOffset-ItemColNameOffset,
 		6,
-		encodeString(d.Options.TextItemsNameTitle),
+		d.Options.TextItemsNameTitle,
 		"0",
 		0,
 		"",
@@ -176,7 +176,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(
 		ItemColQuantityOffset-ItemColUnitPriceOffset,
 		6,
-		encodeString(d.Options.TextItemsUnitCostTitle),
+		d.Options.TextItemsUnitCostTitle,
 		"0",
 		0,
 		"",
@@ -190,7 +190,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(
 		ItemColTaxOffset-ItemColQuantityOffset,
 		6,
-		encodeString(d.Options.TextItemsQuantityTitle),
+		d.Options.TextItemsQuantityTitle,
 		"0",
 		0,
 		"",
@@ -204,7 +204,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(
 		ItemColTaxOffset-ItemColTotalHTOffset,
 		6,
-		encodeString(d.Options.TextItemsTotalHTTitle),
+		d.Options.TextItemsTotalHTTitle,
 		"0",
 		0,
 		"",
@@ -218,7 +218,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(
 		ItemColDiscountOffset-ItemColTaxOffset,
 		6,
-		encodeString(d.Options.TextItemsTaxTitle),
+		d.Options.TextItemsTaxTitle,
 		"0",
 		0,
 		"",
@@ -232,7 +232,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(
 		ItemColTotalTTCOffset-ItemColDiscountOffset,
 		6,
-		encodeString(d.Options.TextItemsDiscountTitle),
+		d.Options.TextItemsDiscountTitle,
 		"0",
 		0,
 		"",
@@ -243,7 +243,7 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 
 	// TOTAL TTC
 	pdf.SetX(ItemColTotalTTCOffset)
-	pdf.CellFormat(190-ItemColTotalTTCOffset, 6, encodeString(d.Options.TextItemsTotalTTCTitle), "0", 0, "", false, 0, "")
+	pdf.CellFormat(190-ItemColTotalTTCOffset, 6, d.Options.TextItemsTotalTTCTitle, "0", 0, "", false, 0, "")
 }
 
 func (d *Document) appendItems(pdf *gofpdf.Fpdf) {
@@ -251,7 +251,7 @@ func (d *Document) appendItems(pdf *gofpdf.Fpdf) {
 
 	pdf.SetX(10)
 	pdf.SetY(pdf.GetY() + 8)
-	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetFont("dejavu", "", 8)
 
 	for i := 0; i < len(d.Items); i++ {
 		item := d.Items[i]
@@ -268,7 +268,7 @@ func (d *Document) appendItems(pdf *gofpdf.Fpdf) {
 			// Add page
 			pdf.AddPage()
 			d.drawsTableTitles(pdf)
-			pdf.SetFont("Helvetica", "", 8)
+			pdf.SetFont("dejavu", "", 8)
 		}
 
 		pdf.SetX(10)
@@ -283,14 +283,14 @@ func (d *Document) appendNotes(pdf *gofpdf.Fpdf) {
 
 	currentY := pdf.GetY()
 
-	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetFont("dejavu", "", 9)
 	pdf.SetX(BaseMargin)
 	pdf.SetRightMargin(100)
 	pdf.SetY(currentY + 10)
 
 	_, lineHt := pdf.GetFontSize()
 	html := pdf.HTMLBasicNew()
-	html.Write(lineHt, encodeString(d.Notes))
+	html.Write(lineHt, d.Notes)
 
 	pdf.SetRightMargin(BaseMargin)
 	pdf.SetY(currentY)
@@ -298,7 +298,7 @@ func (d *Document) appendNotes(pdf *gofpdf.Fpdf) {
 
 func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 	ac := accounting.Accounting{
-		Symbol:    encodeString(d.Options.CurrencySymbol),
+		Symbol:    d.Options.CurrencySymbol,
 		Precision: d.Options.CurrencyPrecision,
 		Thousand:  d.Options.CurrencyThousand,
 		Decimal:   d.Options.CurrencyDecimal,
@@ -367,14 +367,14 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 	}
 
 	pdf.SetY(pdf.GetY() + 10)
-	pdf.SetFont("Helvetica", "", LargeTextFontSize)
+	pdf.SetFont("dejavu", "", LargeTextFontSize)
 	pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 
 	// Draw TOTAL HT title
 	pdf.SetX(120)
 	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
 	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
-	pdf.CellFormat(38, 10, encodeString(d.Options.TextTotalTotal), "0", 0, "R", false, 0, "")
+	pdf.CellFormat(38, 10, d.Options.TextTotalTotal, "0", 0, "R", false, 0, "")
 
 	// Draw TOTAL HT amount
 	pdf.SetX(162)
@@ -391,11 +391,11 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 		pdf.Rect(120, pdf.GetY(), 40, 15, "F")
 
 		// title
-		pdf.CellFormat(38, 7.5, encodeString(d.Options.TextTotalDiscounted), "0", 0, "BR", false, 0, "")
+		pdf.CellFormat(38, 7.5, d.Options.TextTotalDiscounted, "0", 0, "BR", false, 0, "")
 
 		// description
 		pdf.SetXY(120, baseY+7.5)
-		pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		pdf.SetFont("dejavu", "", BaseTextFontSize)
 		pdf.SetTextColor(GreyTextColor[0], GreyTextColor[1], GreyTextColor[2])
 
 		var descString bytes.Buffer
@@ -415,7 +415,7 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 
 		pdf.CellFormat(38, 7.5, descString.String(), "0", 0, "TR", false, 0, "")
 
-		pdf.SetFont("Helvetica", "", LargeTextFontSize)
+		pdf.SetFont("dejavu", "", LargeTextFontSize)
 		pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 
 		// Draw DISCOUNT amount
@@ -433,7 +433,7 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 	pdf.SetX(120)
 	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
 	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
-	pdf.CellFormat(38, 10, encodeString(d.Options.TextTotalTax), "0", 0, "R", false, 0, "")
+	pdf.CellFormat(38, 10, d.Options.TextTotalTax, "0", 0, "R", false, 0, "")
 
 	// Draw TAX amount
 	pdf.SetX(162)
@@ -446,7 +446,7 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 	pdf.SetX(120)
 	pdf.SetFillColor(DarkBgColor[0], DarkBgColor[1], DarkBgColor[2])
 	pdf.Rect(120, pdf.GetY(), 40, 10, "F")
-	pdf.CellFormat(38, 10, encodeString(d.Options.TextTotalWithTax), "0", 0, "R", false, 0, "")
+	pdf.CellFormat(38, 10, d.Options.TextTotalWithTax, "0", 0, "R", false, 0, "")
 
 	// Draw TOTAL TTC amount
 	pdf.SetX(162)
@@ -457,11 +457,11 @@ func (d *Document) appendTotal(pdf *gofpdf.Fpdf) {
 
 func (d *Document) appendPaymentTerm(pdf *gofpdf.Fpdf) {
 	if len(d.PaymentTerm) > 0 {
-		paymentTermString := fmt.Sprintf("%s: %s", encodeString(d.Options.TextPaymentTermTitle), encodeString(d.PaymentTerm))
+		paymentTermString := fmt.Sprintf("%s: %s", d.Options.TextPaymentTermTitle, d.PaymentTerm)
 		pdf.SetY(pdf.GetY() + 15)
 
 		pdf.SetX(120)
-		pdf.SetFont("Helvetica", "B", 10)
+		pdf.SetFont("dejavu", "", 10)
 		pdf.CellFormat(80, 4, paymentTermString, "0", 0, "R", false, 0, "")
 	}
 }

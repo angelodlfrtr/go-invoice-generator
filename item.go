@@ -106,7 +106,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 		pdf.SetX(ItemColNameOffset)
 		pdf.SetY(pdf.GetY() + 1)
 
-		pdf.SetFont("Helvetica", "", SmallTextFontSize)
+		pdf.SetFont("dejavu", "", SmallTextFontSize)
 		pdf.SetTextColor(GreyTextColor[0], GreyTextColor[1], GreyTextColor[2])
 
 		pdf.MultiCell(
@@ -119,7 +119,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 		)
 
 		// Reset font
-		pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		pdf.SetFont("dejavu", "", BaseTextFontSize)
 		pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 	}
 
@@ -220,7 +220,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 
 		// discount desc
 		pdf.SetXY(ItemColDiscountOffset, baseY+(colHeight/2))
-		pdf.SetFont("Helvetica", "", SmallTextFontSize)
+		pdf.SetFont("dejavu", "", SmallTextFontSize)
 		pdf.SetTextColor(GreyTextColor[0], GreyTextColor[1], GreyTextColor[2])
 
 		pdf.CellFormat(
@@ -236,7 +236,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 		)
 
 		// reset font and y
-		pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		pdf.SetFont("dejavu", "", BaseTextFontSize)
 		pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 		pdf.SetY(baseY)
 	}
@@ -293,7 +293,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 
 		// tax desc
 		pdf.SetXY(ItemColTaxOffset, baseY+(colHeight/2))
-		pdf.SetFont("Helvetica", "", SmallTextFontSize)
+		pdf.SetFont("dejavu", "", SmallTextFontSize)
 		pdf.SetTextColor(GreyTextColor[0], GreyTextColor[1], GreyTextColor[2])
 
 		pdf.CellFormat(
@@ -309,7 +309,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 		)
 
 		// reset font and y
-		pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		pdf.SetFont("dejavu", "", BaseTextFontSize)
 		pdf.SetTextColor(BaseTextColor[0], BaseTextColor[1], BaseTextColor[2])
 		pdf.SetY(baseY)
 	}

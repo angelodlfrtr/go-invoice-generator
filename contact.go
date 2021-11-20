@@ -55,9 +55,9 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 	pdf.Rect(x, pdf.GetY(), 70, 8, "F")
 
 	// Set name
-	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFont("dejavu", "", 10)
 	pdf.Cell(40, 8, c.Name)
-	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetFont("dejavu", "", 10)
 
 	if c.Address != nil {
 		// Address rect
@@ -74,7 +74,7 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 		pdf.Rect(x, pdf.GetY()+9, 70, addrRectHeight, "F")
 
 		// Set address
-		pdf.SetFont("Helvetica", "", 10)
+		pdf.SetFont("dejavu", "", 10)
 		pdf.SetXY(x, pdf.GetY()+10)
 		pdf.MultiCell(70, 5, c.Address.ToString(), "0", "L", false)
 	}
