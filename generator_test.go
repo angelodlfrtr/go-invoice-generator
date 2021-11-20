@@ -7,25 +7,25 @@ import (
 
 func TestNew(t *testing.T) {
 	doc, _ := New(Invoice, &Options{
-		TextTypeInvoice: "FACTURE",
-		TextRefTitle:    "Réàf.",
+		TextTypeInvoice: "faktóra",
+		TextRefTitle:    "Ę Ą Ó",
 		AutoPrint:       true,
 	})
 
 	doc.SetHeader(&HeaderFooter{
-		Text:       "<center>Cupcake ipsum dolor sit amet bonbon. I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder.</center>",
+		Text:       "<center>Ćupcake ipsum dolor sit amet bonbon. I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder.</center>",
 		Pagination: true,
 	})
 
 	doc.SetFooter(&HeaderFooter{
-		Text:       "<center>Cupcake ipsum dolor sit amet bonbon. I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder.</center>",
+		Text:       "<center>Ćupcake ipsum dolor sit amet bonbon. I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder.</center>",
 		Pagination: true,
 	})
 
-	doc.SetRef("testràf")
+	doc.SetRef("testràfą")
 	doc.SetVersion("someversion")
 
-	doc.SetDescription("A description àç")
+	doc.SetDescription("A description àçŁ")
 	doc.SetNotes("I léove croissant cotton candy. Carrot cake sweet Ià love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! ")
 
 	doc.SetDate("02/03/2021")

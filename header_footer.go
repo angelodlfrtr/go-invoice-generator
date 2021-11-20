@@ -39,7 +39,7 @@ func (hf *HeaderFooter) applyHeader(d *Document, pdf *gofpdf.Fpdf) error {
 			pdf.SetRightMargin(BaseMargin)
 
 			// Parse Text as html (simple)
-			pdf.SetFont("Helvetica", "", hf.FontSize)
+			pdf.SetFont("dejavu", "", hf.FontSize)
 			_, lineHt := pdf.GetFontSize()
 			html := pdf.HTMLBasicNew()
 			html.Write(lineHt, hf.Text)
@@ -75,7 +75,7 @@ func (hf *HeaderFooter) applyFooter(d *Document, pdf *gofpdf.Fpdf) error {
 			pdf.SetY(287 - HeaderMarginTop)
 
 			// Parse Text as html (simple)
-			pdf.SetFont("Helvetica", "", hf.FontSize)
+			pdf.SetFont("dejavu", "", hf.FontSize)
 			_, lineHt := pdf.GetFontSize()
 			html := pdf.HTMLBasicNew()
 			html.Write(lineHt, hf.Text)

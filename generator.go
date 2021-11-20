@@ -19,5 +19,8 @@ func New(docType string, options *Options) (*Document, error) {
 
 	doc.pdf = gofpdf.New("P", "mm", "A4", "")
 
+	// UTF-8 fonts has to be added manually and .ttf file must exist
+	doc.pdf.AddUTF8Font("dejavu", "", "fonts/DejaVuSansCondensed.ttf")
+
 	return doc, nil
 }
