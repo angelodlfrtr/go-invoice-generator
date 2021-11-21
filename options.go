@@ -30,4 +30,6 @@ type Options struct {
 	TextTotalDiscounted string `default:"TOTAL DISCOUNTED" json:"text_total_discounted,omitempty"`
 	TextTotalTax        string `default:"TAX" json:"text_total_tax,omitempty"`
 	TextTotalWithTax    string `default:"TOTAL WITH TAX" json:"text_total_with_tax,omitempty"`
+
+	DisplayDiscount bool `default:"TOTAL WITH TAX" json:"display_discount,omitempty"`
 }

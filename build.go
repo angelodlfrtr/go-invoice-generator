@@ -228,18 +228,20 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	)
 
 	// Discount
-	pdf.SetX(ItemColDiscountOffset)
-	pdf.CellFormat(
-		ItemColTotalTTCOffset-ItemColDiscountOffset,
-		6,
-		d.Options.TextItemsDiscountTitle,
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
+	if d.Options.DisplayDiscount {
+		pdf.SetX(ItemColDiscountOffset)
+		pdf.CellFormat(
+			ItemColTotalTTCOffset-ItemColDiscountOffset,
+			6,
+			d.Options.TextItemsDiscountTitle,
+			"0",
+			0,
+			"",
+			false,
+			0,
+			"",
+		)
+	}
 
 	// TOTAL TTC
 	pdf.SetX(ItemColTotalTTCOffset)

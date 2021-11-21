@@ -81,7 +81,7 @@ func (i *Item) taxWithDiscount() decimal.Decimal {
 
 func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 	ac := accounting.Accounting{
-		Symbol:    encodeString(options.CurrencySymbol),
+		Symbol:    options.CurrencySymbol,
 		Precision: options.CurrencyPrecision,
 		Thousand:  options.CurrencyThousand,
 		Decimal:   options.CurrencyDecimal,
@@ -95,7 +95,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 	pdf.MultiCell(
 		ItemColUnitPriceOffset-ItemColNameOffset,
 		3,
-		encodeString(i.Name),
+		i.Name,
 		"",
 		"",
 		false,
@@ -112,7 +112,7 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 		pdf.MultiCell(
 			ItemColUnitPriceOffset-ItemColNameOffset,
 			3,
-			encodeString(i.Description),
+			i.Description,
 			"",
 			"",
 			false,
@@ -190,13 +190,13 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 		var discountDesc string
 
 		if discountType == "percent" {
-			discountTitle = fmt.Sprintf("%s %s", discountAmount, encodeString("%"))
+			discountTitle = fmt.Sprintf("%s %s", discountAmount, "%")
 			// get amount from percent
 			dCost := i.totalWithoutTax()
 			dAmount := dCost.Mul(discountAmount.Div(decimal.NewFromFloat(100)))
 			discountDesc = fmt.Sprintf("-%s", ac.FormatMoneyDecimal(dAmount))
 		} else {
-			discountTitle = fmt.Sprintf("%s %s", discountAmount, encodeString("€"))
+			discountTitle = fmt.Sprintf("%s %s", discountAmount, "€")
 			dCost := i.totalWithoutTax()
 			dPerc := discountAmount.Mul(decimal.NewFromFloat(100))
 			dPerc = dPerc.Div(dCost)
@@ -263,13 +263,13 @@ func (i *Item) appendColTo(options *Options, pdf *gofpdf.Fpdf) {
 		var taxDesc string
 
 		if taxType == "percent" {
-			taxTitle = fmt.Sprintf("%s %s", taxAmount, encodeString("%"))
+			taxTitle = fmt.Sprintf("%s %s", taxAmount, "%")
 			// get amount from percent
 			dCost := i.totalWithoutTaxAndWithDiscount()
 			dAmount := dCost.Mul(taxAmount.Div(decimal.NewFromFloat(100)))
 			taxDesc = ac.FormatMoneyDecimal(dAmount)
 		} else {
-			taxTitle = fmt.Sprintf("%s %s", taxAmount, encodeString("€"))
+			taxTitle = fmt.Sprintf("%s %s", taxAmount, "€")
 			dCost := i.totalWithoutTaxAndWithDiscount()
 			dPerc := taxAmount.Mul(decimal.NewFromFloat(100))
 			dPerc = dPerc.Div(dCost)
