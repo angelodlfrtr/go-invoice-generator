@@ -18,6 +18,10 @@ func (d *Document) typeAsString() string {
 		return d.Options.TextTypeInvoice
 	}
 
+	if d.Type == InvoiceMonthly {
+		return d.Options.TextTypeInvoiceMonthly
+	}
+
 	if d.Type == Quotation {
 		return d.Options.TextTypeQuotation
 	}
