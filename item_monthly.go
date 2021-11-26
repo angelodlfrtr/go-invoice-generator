@@ -21,7 +21,8 @@ func (i *Item) unitCostMonthly() decimal.Decimal {
 
 func (i *Item) quantityMonthly() decimal.Decimal {
 	quantity, _ := decimal.NewFromString(i.Quantity)
-	return quantity
+	eighthrisoneday := decimal.NewFromFloat(8)
+	return quantity.Div(eighthrisoneday)
 }
 
 func (i *Item) totalWithoutTaxMonthly() decimal.Decimal {
@@ -142,7 +143,7 @@ func (i *Item) appendColToMonthly(options *Options, pdf *gofpdf.Fpdf) {
 	pdf.CellFormat(
 		ItemColTaxOffset-ItemColQuantityOffset,
 		colHeight,
-		i.quantity().String(),
+		i.quantityMonthly().String(),
 		"0",
 		0,
 		"",

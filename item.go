@@ -25,6 +25,7 @@ func (i *Item) unitCost() decimal.Decimal {
 
 func (i *Item) quantity() decimal.Decimal {
 	quantity, _ := decimal.NewFromString(i.Quantity)
+
 	return quantity
 }
 
