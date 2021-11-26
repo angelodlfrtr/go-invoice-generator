@@ -6,7 +6,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	doc, _ := New(Invoice, &Options{
+	doc, _ := New(InvoiceMonthly, &Options{
 		TextTypeInvoice: "FACTURE",
 		TextRefTitle:    "Réàf.",
 		AutoPrint:       true,
