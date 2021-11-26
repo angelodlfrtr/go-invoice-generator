@@ -9,7 +9,7 @@ type Document struct {
 	Options      *Options      `json:"options,omitempty"`
 	Header       *HeaderFooter `json:"header,omitempty"`
 	Footer       *HeaderFooter `json:"footer,omitempty"`
-	Type         string        `json:"type,omitempty" validate:"required,oneof=INVOICE DELIVERY_NOTE QUOTATION"`
+	Type         string        `json:"type,omitempty" validate:"required,oneof=INVOICE INVOICE_MONTHLY DELIVERY_NOTE QUOTATION"`
 	Ref          string        `json:"ref,omitempty" validate:"required,min=1,max=32"`
 	Version      string        `json:"version,omitempty" validate:"max=32"`
 	ClientRef    string        `json:"client_ref,omitempty" validate:"max=64"`

@@ -4,6 +4,9 @@ const (
 	// Invoice define the "invoice" document type
 	Invoice string = "INVOICE"
 
+	// InvoiceMonthly define the "invoice monthly" document type
+	InvoiceMonthly = "INVOICE_MONTHLY"
+
 	// Quotation define the "quotation" document type
 	Quotation string = "QUOTATION"
 

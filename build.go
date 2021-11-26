@@ -172,18 +172,18 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	)
 
 	// Unit price
-	pdf.SetX(ItemColUnitPriceOffset)
-	pdf.CellFormat(
-		ItemColQuantityOffset-ItemColUnitPriceOffset,
-		6,
-		encodeString(d.Options.TextItemsUnitCostTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
+	/* 	pdf.SetX(ItemColUnitPriceOffset)
+	   	pdf.CellFormat(
+	   		ItemColQuantityOffset-ItemColUnitPriceOffset,
+	   		6,
+	   		encodeString(d.Options.TextItemsUnitCostTitle),
+	   		"0",
+	   		0,
+	   		"",
+	   		false,
+	   		0,
+	   		"",
+	   	) */
 
 	// Quantity
 	pdf.SetX(ItemColQuantityOffset)
@@ -252,27 +252,51 @@ func (d *Document) appendItems(pdf *gofpdf.Fpdf) {
 	pdf.SetX(10)
 	pdf.SetY(pdf.GetY() + 8)
 	pdf.SetFont("Helvetica", "", 8)
+	if d.Type == "INVOICE_MONTHLY" {
+		fmt.Printf("%sa", d.Type)
+		for i := 0; i < len(d.Items); i++ {
+			item := d.Items[i]
 
-	for i := 0; i < len(d.Items); i++ {
-		item := d.Items[i]
+			// Check item tax
+			if item.Tax == nil {
+				item.Tax = d.DefaultTax
+			}
 
-		// Check item tax
-		if item.Tax == nil {
-			item.Tax = d.DefaultTax
+			// Append to pdf
+			item.appendColToMonthly(d.Options, pdf)
+
+			if pdf.GetY() > MaxPageHeight {
+				// Add page
+				pdf.AddPage()
+				d.drawsTableTitles(pdf)
+				pdf.SetFont("Helvetica", "", 8)
+			}
+
+			pdf.SetX(10)
+			pdf.SetY(pdf.GetY() + 6)
 		}
+	} else {
+		for i := 0; i < len(d.Items); i++ {
+			item := d.Items[i]
 
-		// Append to pdf
-		item.appendColTo(d.Options, pdf)
+			// Check item tax
+			if item.Tax == nil {
+				item.Tax = d.DefaultTax
+			}
 
-		if pdf.GetY() > MaxPageHeight {
-			// Add page
-			pdf.AddPage()
-			d.drawsTableTitles(pdf)
-			pdf.SetFont("Helvetica", "", 8)
+			// Append to pdf
+			item.appendColTo(d.Options, pdf)
+
+			if pdf.GetY() > MaxPageHeight {
+				// Add page
+				pdf.AddPage()
+				d.drawsTableTitles(pdf)
+				pdf.SetFont("Helvetica", "", 8)
+			}
+
+			pdf.SetX(10)
+			pdf.SetY(pdf.GetY() + 6)
 		}
-
-		pdf.SetX(10)
-		pdf.SetY(pdf.GetY() + 6)
 	}
 }
 

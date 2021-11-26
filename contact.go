@@ -84,9 +84,11 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 
 func (c *Contact) appendCompanyContactToDoc(pdf *gofpdf.Fpdf) float64 {
 	x, y, _, _ := pdf.GetMargins()
-	return c.appendContactTODoc(x, y, true, "L", pdf)
+	return c.appendContactTODoc(x, y+30, true, "L", pdf)
 }
 
 func (c *Contact) appendCustomerContactToDoc(pdf *gofpdf.Fpdf) float64 {
-	return c.appendContactTODoc(130, BaseMarginTop+25, true, "R", pdf)
+	x, y, _, _ := pdf.GetMargins()
+	// return c.appendContactTODoc(130, BaseMarginTop+25, true, "R", pdf)
+	return c.appendContactTODoc(x, y, true, "L", pdf)
 }
