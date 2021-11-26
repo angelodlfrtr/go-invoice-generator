@@ -172,19 +172,20 @@ func (d *Document) drawsTableTitles(pdf *gofpdf.Fpdf) {
 	)
 
 	// Unit price
-	/* 	pdf.SetX(ItemColUnitPriceOffset)
-	   	pdf.CellFormat(
-	   		ItemColQuantityOffset-ItemColUnitPriceOffset,
-	   		6,
-	   		encodeString(d.Options.TextItemsUnitCostTitle),
-	   		"0",
-	   		0,
-	   		"",
-	   		false,
-	   		0,
-	   		"",
-	   	) */
-
+	if d.Type != "INVOICE_MONTHLY" {
+		pdf.SetX(ItemColUnitPriceOffset)
+		pdf.CellFormat(
+			ItemColQuantityOffset-ItemColUnitPriceOffset,
+			6,
+			encodeString(d.Options.TextItemsUnitCostTitle),
+			"0",
+			0,
+			"",
+			false,
+			0,
+			"",
+		)
+	}
 	// Quantity
 	pdf.SetX(ItemColQuantityOffset)
 	pdf.CellFormat(
