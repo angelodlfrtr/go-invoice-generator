@@ -253,7 +253,6 @@ func (d *Document) appendItems(pdf *gofpdf.Fpdf) {
 	pdf.SetY(pdf.GetY() + 8)
 	pdf.SetFont("Helvetica", "", 8)
 	if d.Type == "INVOICE_MONTHLY" {
-		fmt.Printf("%sa", d.Type)
 		for i := 0; i < len(d.Items); i++ {
 			item := d.Items[i]
 
