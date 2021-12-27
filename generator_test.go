@@ -6,9 +6,30 @@ import (
 
 func TestNew(t *testing.T) {
 	doc, _ := New(InvoiceMonthly, &Options{
-		TextTypeInvoice: "FACTURE",
-		TextRefTitle:    "Réàf.",
-		AutoPrint:       true,
+		AutoPrint:              true,
+		CurrencySymbol:         "",
+		CurrencyPrecision:      0,
+		CurrencyDecimal:        "",
+		CurrencyThousand:       "",
+		TextTypeInvoice:        "FACTURE",
+		TextTypeInvoiceMonthly: "",
+		TextTypeQuotation:      "",
+		TextTypeDeliveryNote:   "",
+		TextRefTitle:           "Réàf.",
+		TextVersionTitle:       "",
+		TextDateTitle:          "",
+		TextPaymentTermTitle:   "HST",
+		TextItemsNameTitle:     "",
+		TextItemsUnitCostTitle: "",
+		TextItemsQuantityTitle: "",
+		TextItemsTotalHTTitle:  "",
+		TextItemsTaxTitle:      "",
+		TextItemsDiscountTitle: "",
+		TextItemsTotalTTCTitle: "",
+		TextTotalTotal:         "",
+		TextTotalDiscounted:    "",
+		TextTotalTax:           "",
+		TextTotalWithTax:       "",
 	})
 
 	doc.SetHeader(&HeaderFooter{
@@ -28,7 +49,7 @@ func TestNew(t *testing.T) {
 	doc.SetNotes("I léove croissant cotton candy. Carrot cake sweet Ià love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder! ")
 
 	doc.SetDate("02/03/2021")
-	doc.SetPaymentTerm("02/04/2021")
+	doc.SetPaymentTerm("SOME CODE")
 
 	//logoBytes, _ := ioutil.ReadFile("./example_logo.png")
 
