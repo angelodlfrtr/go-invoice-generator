@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"io/ioutil"
 	"testing"
 )
 
@@ -31,11 +30,11 @@ func TestNew(t *testing.T) {
 	doc.SetDate("02/03/2021")
 	doc.SetPaymentTerm("02/04/2021")
 
-	logoBytes, _ := ioutil.ReadFile("./example_logo.png")
+	//logoBytes, _ := ioutil.ReadFile("./example_logo.png")
 
 	doc.SetCompany(&Contact{
 		Name: "Test Company",
-		Logo: &logoBytes,
+		//Logo: &logoBytes,
 		Address: &Address{
 			Address:    "89 Rue de Brest",
 			Address2:   "Appartement 2",
@@ -46,13 +45,9 @@ func TestNew(t *testing.T) {
 	})
 
 	doc.SetCustomer(&Contact{
-		Name: "Test Customer",
-		Address: &Address{
-			Address:    "89 Rue de Paris",
-			PostalCode: "29200",
-			City:       "Brest",
-			Country:    "France",
-		},
+		Contractor: "TEST",
+		Name:       "Test Customer",
+		Address:    &Address{Address: "89 Rue de Paris", PostalCode: "29200", City: "Brest", Country: "France"},
 	})
 
 	for i := 0; i < 3; i++ {

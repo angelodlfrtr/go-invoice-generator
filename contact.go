@@ -10,9 +10,10 @@ import (
 
 // Contact contact a company informations
 type Contact struct {
-	Name    string   `json:"name,omitempty" validate:"required,min=1,max=256"`
-	Logo    *[]byte  `json:"logo,omitempty"` // Logo byte array
-	Address *Address `json:"address,omitempty"`
+	Contractor string   `json:"contractor,omitempty"`
+	Name       string   `json:"name,omitempty" validate:"required,min=1,max=256"`
+	Logo       *[]byte  `json:"logo,omitempty"` // Logo byte array
+	Address    *Address `json:"address,omitempty"`
 }
 
 func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign string, pdf *gofpdf.Fpdf) float64 {
@@ -63,6 +64,10 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 		// Address rect
 		var addrRectHeight float64 = 17
 
+		if len(c.Contractor) > 0 {
+			addrRectHeight = addrRectHeight + 5
+		}
+
 		if len(c.Address.Address2) > 0 {
 			addrRectHeight = addrRectHeight + 5
 		}
@@ -76,6 +81,11 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 		// Set address
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetXY(x, pdf.GetY()+10)
+		if len(c.Contractor) > 0 {
+			pdf.Cell(70, 5, "c/o "+c.Contractor)
+			pdf.SetXY(x, pdf.GetY()+5)
+		}
+
 		pdf.MultiCell(70, 5, c.Address.ToString(), "0", "L", false)
 	}
 
@@ -84,7 +94,7 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 
 func (c *Contact) appendCompanyContactToDoc(pdf *gofpdf.Fpdf) float64 {
 	x, y, _, _ := pdf.GetMargins()
-	return c.appendContactTODoc(x, y+30, true, "L", pdf)
+	return c.appendContactTODoc(x, y+35, true, "L", pdf)
 }
 
 func (c *Contact) appendCustomerContactToDoc(pdf *gofpdf.Fpdf) float64 {
