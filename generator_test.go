@@ -55,7 +55,7 @@ func TestNew(t *testing.T) {
 		},
 	})
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 10; i++ {
 		doc.AppendItem(&Item{
 			Name:        "Cupcake ipsum dolor sit amet bonbon, coucou bonbon lala jojo, mama titi toto",
 			Description: "Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon",
