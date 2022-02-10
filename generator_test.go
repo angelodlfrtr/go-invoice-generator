@@ -10,6 +10,10 @@ func TestNew(t *testing.T) {
 		TextTypeInvoice: "FACTURE",
 		TextRefTitle:    "Réàf.",
 		AutoPrint:       true,
+		BaseTextColor:   []int{6, 63, 156},
+		GreyTextColor:   []int{161, 96, 149},
+		GreyBgColor:     []int{171, 240, 129},
+		DarkBgColor:     []int{176, 12, 20},
 	})
 
 	doc.SetHeader(&HeaderFooter{

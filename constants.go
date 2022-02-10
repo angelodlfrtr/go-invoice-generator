@@ -59,16 +59,4 @@ var (
 
 	// LargeTextFontSize define the large font size for text in document
 	LargeTextFontSize float64 = 10
-
-	// BaseTextColor define the base color used for text in document
-	BaseTextColor = []int{35, 35, 35}
-
-	// GreyTextColor define the base color used for text in document
-	GreyTextColor = []int{82, 82, 82}
-
-	// GreyBgColor define the grey background color used for text in document
-	GreyBgColor = []int{232, 232, 232}
-
-	// DarkBgColor define the grey background color used for text in document
-	DarkBgColor = []int{212, 212, 212}
 )

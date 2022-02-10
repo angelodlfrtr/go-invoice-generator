@@ -15,8 +15,14 @@ type Contact struct {
 	Address *Address `json:"address,omitempty"`
 }
 
-func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign string, pdf *gofpdf.Fpdf) float64 {
-	pdf.SetXY(x, y)
+func (c *Contact) appendContactTODoc(
+	x float64,
+	y float64,
+	fill bool,
+	logoAlign string,
+	doc *Document,
+) float64 {
+	doc.pdf.SetXY(x, y)
 
 	// Logo
 	if c.Logo != nil {
@@ -27,7 +33,7 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 		// Get image format
 		_, format, _ := image.DecodeConfig(bytes.NewReader(*c.Logo))
 		// Register image in pdf
-		imageInfo := pdf.RegisterImageOptionsReader(fileName, gofpdf.ImageOptions{
+		imageInfo := doc.pdf.RegisterImageOptionsReader(fileName, gofpdf.ImageOptions{
 			ImageType: format,
 		}, ioReader)
 
@@ -35,29 +41,33 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 			var imageOpt gofpdf.ImageOptions
 			imageOpt.ImageType = format
 
-			pdf.ImageOptions(fileName, pdf.GetX(), y, 0, 30, false, imageOpt, 0, "")
+			doc.pdf.ImageOptions(fileName, doc.pdf.GetX(), y, 0, 30, false, imageOpt, 0, "")
 
-			pdf.SetY(y + 30)
+			doc.pdf.SetY(y + 30)
 		}
 	}
 
 	// Name
 	if fill {
-		pdf.SetFillColor(GreyBgColor[0], GreyBgColor[1], GreyBgColor[2])
+		doc.pdf.SetFillColor(
+			doc.Options.GreyBgColor[0],
+			doc.Options.GreyBgColor[1],
+			doc.Options.GreyBgColor[2],
+		)
 	} else {
-		pdf.SetFillColor(255, 255, 255)
+		doc.pdf.SetFillColor(255, 255, 255)
 	}
 
 	// Reset x
-	pdf.SetX(x)
+	doc.pdf.SetX(x)
 
 	// Name rect
-	pdf.Rect(x, pdf.GetY(), 70, 8, "F")
+	doc.pdf.Rect(x, doc.pdf.GetY(), 70, 8, "F")
 
 	// Set name
-	pdf.SetFont("Helvetica", "B", 10)
-	pdf.Cell(40, 8, c.Name)
-	pdf.SetFont("Helvetica", "", 10)
+	doc.pdf.SetFont("Helvetica", "B", 10)
+	doc.pdf.Cell(40, 8, c.Name)
+	doc.pdf.SetFont("Helvetica", "", 10)
 
 	if c.Address != nil {
 		// Address rect
@@ -71,22 +81,22 @@ func (c *Contact) appendContactTODoc(x float64, y float64, fill bool, logoAlign 
 			addrRectHeight = addrRectHeight - 5
 		}
 
-		pdf.Rect(x, pdf.GetY()+9, 70, addrRectHeight, "F")
+		doc.pdf.Rect(x, doc.pdf.GetY()+9, 70, addrRectHeight, "F")
 
 		// Set address
-		pdf.SetFont("Helvetica", "", 10)
-		pdf.SetXY(x, pdf.GetY()+10)
-		pdf.MultiCell(70, 5, c.Address.ToString(), "0", "L", false)
+		doc.pdf.SetFont("Helvetica", "", 10)
+		doc.pdf.SetXY(x, doc.pdf.GetY()+10)
+		doc.pdf.MultiCell(70, 5, c.Address.ToString(), "0", "L", false)
 	}
 
-	return pdf.GetY()
+	return doc.pdf.GetY()
 }
 
-func (c *Contact) appendCompanyContactToDoc(pdf *gofpdf.Fpdf) float64 {
-	x, y, _, _ := pdf.GetMargins()
-	return c.appendContactTODoc(x, y, true, "L", pdf)
+func (c *Contact) appendCompanyContactToDoc(doc *Document) float64 {
+	x, y, _, _ := doc.pdf.GetMargins()
+	return c.appendContactTODoc(x, y, true, "L", doc)
 }
 
-func (c *Contact) appendCustomerContactToDoc(pdf *gofpdf.Fpdf) float64 {
-	return c.appendContactTODoc(130, BaseMarginTop+25, true, "R", pdf)
+func (c *Contact) appendCustomerContactToDoc(doc *Document) float64 {
+	return c.appendContactTODoc(130, BaseMarginTop+25, true, "R", doc)
 }

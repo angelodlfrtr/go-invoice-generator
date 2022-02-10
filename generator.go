@@ -8,9 +8,7 @@ import (
 
 // New return a new documents with provided types and defaults
 func New(docType string, options *Options) (*Document, error) {
-	if err := defaults.Set(options); err != nil {
-		return nil, err
-	}
+	_ = defaults.Set(options)
 
 	doc := &Document{
 		Options: options,
