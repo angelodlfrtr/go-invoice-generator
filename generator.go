@@ -16,6 +16,7 @@ func New(docType string, options *Options) (*Document, error) {
 	}
 
 	doc.pdf = gofpdf.New("P", "mm", "A4", "")
+	doc.Options.UnicodeTranslateFunc = doc.pdf.UnicodeTranslatorFromDescriptor("")
 
 	return doc, nil
 }

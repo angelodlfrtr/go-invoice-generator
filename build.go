@@ -49,7 +49,7 @@ func (doc *Document) Build() (*gofpdf.Fpdf, error) {
 	doc.pdf.AddPage()
 
 	// Load font
-	doc.pdf.SetFont("Helvetica", "", 12)
+	doc.pdf.SetFont(doc.Options.Font, "", 12)
 
 	// Appenf document title
 	doc.appendTitle()
@@ -112,8 +112,8 @@ func (doc *Document) appendTitle() {
 	doc.pdf.Rect(120, BaseMarginTop, 80, 10, "F")
 
 	// Draw text
-	doc.pdf.SetFont("Helvetica", "", 14)
-	doc.pdf.CellFormat(80, 10, encodeString(title), "0", 0, "C", false, 0, "")
+	doc.pdf.SetFont(doc.Options.Font, "", 14)
+	doc.pdf.CellFormat(80, 10, doc.encodeString(title), "0", 0, "C", false, 0, "")
 }
 
 func (doc *Document) appendMetas() {
@@ -121,15 +121,15 @@ func (doc *Document) appendMetas() {
 	refString := fmt.Sprintf("%s: %s", doc.Options.TextRefTitle, doc.Ref)
 
 	doc.pdf.SetXY(120, BaseMarginTop+11)
-	doc.pdf.SetFont("Helvetica", "", 8)
-	doc.pdf.CellFormat(80, 4, encodeString(refString), "0", 0, "R", false, 0, "")
+	doc.pdf.SetFont(doc.Options.Font, "", 8)
+	doc.pdf.CellFormat(80, 4, doc.encodeString(refString), "0", 0, "R", false, 0, "")
 
 	// Append version
 	if len(doc.Version) > 0 {
 		versionString := fmt.Sprintf("%s: %s", doc.Options.TextVersionTitle, doc.Version)
 		doc.pdf.SetXY(120, BaseMarginTop+15)
-		doc.pdf.SetFont("Helvetica", "", 8)
-		doc.pdf.CellFormat(80, 4, encodeString(versionString), "0", 0, "R", false, 0, "")
+		doc.pdf.SetFont(doc.Options.Font, "", 8)
+		doc.pdf.CellFormat(80, 4, doc.encodeString(versionString), "0", 0, "R", false, 0, "")
 	}
 
 	// Append date
@@ -139,15 +139,15 @@ func (doc *Document) appendMetas() {
 	}
 	dateString := fmt.Sprintf("%s: %s", doc.Options.TextDateTitle, date)
 	doc.pdf.SetXY(120, BaseMarginTop+19)
-	doc.pdf.SetFont("Helvetica", "", 8)
-	doc.pdf.CellFormat(80, 4, encodeString(dateString), "0", 0, "R", false, 0, "")
+	doc.pdf.SetFont(doc.Options.Font, "", 8)
+	doc.pdf.CellFormat(80, 4, doc.encodeString(dateString), "0", 0, "R", false, 0, "")
 }
 
 func (doc *Document) appendDescription() {
 	if len(doc.Description) > 0 {
 		doc.pdf.SetY(doc.pdf.GetY() + 10)
-		doc.pdf.SetFont("Helvetica", "", 10)
-		doc.pdf.MultiCell(190, 5, encodeString(doc.Description), "B", "L", false)
+		doc.pdf.SetFont(doc.Options.Font, "", 10)
+		doc.pdf.MultiCell(190, 5, doc.encodeString(doc.Description), "B", "L", false)
 	}
 }
 
@@ -155,7 +155,7 @@ func (doc *Document) drawsTableTitles() {
 	// Draw table titles
 	doc.pdf.SetX(10)
 	doc.pdf.SetY(doc.pdf.GetY() + 5)
-	doc.pdf.SetFont("Helvetica", "B", 8)
+	doc.pdf.SetFont(doc.Options.BoldFont, "B", 8)
 
 	// Draw rec
 	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
@@ -166,7 +166,7 @@ func (doc *Document) drawsTableTitles() {
 	doc.pdf.CellFormat(
 		ItemColUnitPriceOffset-ItemColNameOffset,
 		6,
-		encodeString(doc.Options.TextItemsNameTitle),
+		doc.encodeString(doc.Options.TextItemsNameTitle),
 		"0",
 		0,
 		"",
@@ -180,7 +180,7 @@ func (doc *Document) drawsTableTitles() {
 	doc.pdf.CellFormat(
 		ItemColQuantityOffset-ItemColUnitPriceOffset,
 		6,
-		encodeString(doc.Options.TextItemsUnitCostTitle),
+		doc.encodeString(doc.Options.TextItemsUnitCostTitle),
 		"0",
 		0,
 		"",
@@ -194,7 +194,7 @@ func (doc *Document) drawsTableTitles() {
 	doc.pdf.CellFormat(
 		ItemColTaxOffset-ItemColQuantityOffset,
 		6,
-		encodeString(doc.Options.TextItemsQuantityTitle),
+		doc.encodeString(doc.Options.TextItemsQuantityTitle),
 		"0",
 		0,
 		"",
@@ -208,7 +208,7 @@ func (doc *Document) drawsTableTitles() {
 	doc.pdf.CellFormat(
 		ItemColTaxOffset-ItemColTotalHTOffset,
 		6,
-		encodeString(doc.Options.TextItemsTotalHTTitle),
+		doc.encodeString(doc.Options.TextItemsTotalHTTitle),
 		"0",
 		0,
 		"",
@@ -222,7 +222,7 @@ func (doc *Document) drawsTableTitles() {
 	doc.pdf.CellFormat(
 		ItemColDiscountOffset-ItemColTaxOffset,
 		6,
-		encodeString(doc.Options.TextItemsTaxTitle),
+		doc.encodeString(doc.Options.TextItemsTaxTitle),
 		"0",
 		0,
 		"",
@@ -236,7 +236,7 @@ func (doc *Document) drawsTableTitles() {
 	doc.pdf.CellFormat(
 		ItemColTotalTTCOffset-ItemColDiscountOffset,
 		6,
-		encodeString(doc.Options.TextItemsDiscountTitle),
+		doc.encodeString(doc.Options.TextItemsDiscountTitle),
 		"0",
 		0,
 		"",
@@ -250,7 +250,7 @@ func (doc *Document) drawsTableTitles() {
 	doc.pdf.CellFormat(
 		190-ItemColTotalTTCOffset,
 		6,
-		encodeString(doc.Options.TextItemsTotalTTCTitle),
+		doc.encodeString(doc.Options.TextItemsTotalTTCTitle),
 		"0",
 		0,
 		"",
@@ -265,7 +265,7 @@ func (doc *Document) appendItems() {
 
 	doc.pdf.SetX(10)
 	doc.pdf.SetY(doc.pdf.GetY() + 8)
-	doc.pdf.SetFont("Helvetica", "", 8)
+	doc.pdf.SetFont(doc.Options.Font, "", 8)
 
 	for i := 0; i < len(doc.Items); i++ {
 		item := doc.Items[i]
@@ -282,7 +282,7 @@ func (doc *Document) appendItems() {
 			// Add page
 			doc.pdf.AddPage()
 			doc.drawsTableTitles()
-			doc.pdf.SetFont("Helvetica", "", 8)
+			doc.pdf.SetFont(doc.Options.Font, "", 8)
 		}
 
 		doc.pdf.SetX(10)
@@ -297,14 +297,14 @@ func (doc *Document) appendNotes() {
 
 	currentY := doc.pdf.GetY()
 
-	doc.pdf.SetFont("Helvetica", "", 9)
+	doc.pdf.SetFont(doc.Options.Font, "", 9)
 	doc.pdf.SetX(BaseMargin)
 	doc.pdf.SetRightMargin(100)
 	doc.pdf.SetY(currentY + 10)
 
 	_, lineHt := doc.pdf.GetFontSize()
 	html := doc.pdf.HTMLBasicNew()
-	html.Write(lineHt, encodeString(doc.Notes))
+	html.Write(lineHt, doc.encodeString(doc.Notes))
 
 	doc.pdf.SetRightMargin(BaseMargin)
 	doc.pdf.SetY(currentY)
@@ -312,7 +312,7 @@ func (doc *Document) appendNotes() {
 
 func (doc *Document) appendTotal() {
 	ac := accounting.Accounting{
-		Symbol:    encodeString(doc.Options.CurrencySymbol),
+		Symbol:    doc.Options.CurrencySymbol,
 		Precision: doc.Options.CurrencyPrecision,
 		Thousand:  doc.Options.CurrencyThousand,
 		Decimal:   doc.Options.CurrencyDecimal,
@@ -381,7 +381,7 @@ func (doc *Document) appendTotal() {
 	}
 
 	doc.pdf.SetY(doc.pdf.GetY() + 10)
-	doc.pdf.SetFont("Helvetica", "", LargeTextFontSize)
+	doc.pdf.SetFont(doc.Options.Font, "", LargeTextFontSize)
 	doc.pdf.SetTextColor(
 		doc.Options.BaseTextColor[0],
 		doc.Options.BaseTextColor[1],
@@ -392,13 +392,13 @@ func (doc *Document) appendTotal() {
 	doc.pdf.SetX(120)
 	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
 	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(38, 10, encodeString(doc.Options.TextTotalTotal), "0", 0, "R", false, 0, "")
+	doc.pdf.CellFormat(38, 10, doc.encodeString(doc.Options.TextTotalTotal), "0", 0, "R", false, 0, "")
 
 	// Draw TOTAL HT amount
 	doc.pdf.SetX(162)
 	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
 	doc.pdf.Rect(160, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(total), "0", 0, "L", false, 0, "")
+	doc.pdf.CellFormat(40, 10, doc.encodeString(ac.FormatMoneyDecimal(total)), "0", 0, "L", false, 0, "")
 
 	if doc.Discount != nil {
 		baseY := doc.pdf.GetY() + 10
@@ -409,11 +409,11 @@ func (doc *Document) appendTotal() {
 		doc.pdf.Rect(120, doc.pdf.GetY(), 40, 15, "F")
 
 		// title
-		doc.pdf.CellFormat(38, 7.5, encodeString(doc.Options.TextTotalDiscounted), "0", 0, "BR", false, 0, "")
+		doc.pdf.CellFormat(38, 7.5, doc.encodeString(doc.Options.TextTotalDiscounted), "0", 0, "BR", false, 0, "")
 
 		// description
 		doc.pdf.SetXY(120, baseY+7.5)
-		doc.pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.GreyTextColor[0],
 			doc.Options.GreyTextColor[1],
@@ -437,9 +437,9 @@ func (doc *Document) appendTotal() {
 			descString.WriteString(" %")
 		}
 
-		doc.pdf.CellFormat(38, 7.5, descString.String(), "0", 0, "TR", false, 0, "")
+		doc.pdf.CellFormat(38, 7.5, doc.encodeString(descString.String()), "0", 0, "TR", false, 0, "")
 
-		doc.pdf.SetFont("Helvetica", "", LargeTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", LargeTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.BaseTextColor[0],
 			doc.Options.BaseTextColor[1],
@@ -451,7 +451,7 @@ func (doc *Document) appendTotal() {
 		doc.pdf.SetX(162)
 		doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
 		doc.pdf.Rect(160, doc.pdf.GetY(), 40, 15, "F")
-		doc.pdf.CellFormat(40, 15, ac.FormatMoneyDecimal(totalWithDiscount), "0", 0, "L", false, 0, "")
+		doc.pdf.CellFormat(40, 15, doc.encodeString(ac.FormatMoneyDecimal(totalWithDiscount)), "0", 0, "L", false, 0, "")
 		doc.pdf.SetY(doc.pdf.GetY() + 15)
 	} else {
 		doc.pdf.SetY(doc.pdf.GetY() + 10)
@@ -461,39 +461,39 @@ func (doc *Document) appendTotal() {
 	doc.pdf.SetX(120)
 	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
 	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(38, 10, encodeString(doc.Options.TextTotalTax), "0", 0, "R", false, 0, "")
+	doc.pdf.CellFormat(38, 10, doc.encodeString(doc.Options.TextTotalTax), "0", 0, "R", false, 0, "")
 
 	// Draw TAX amount
 	doc.pdf.SetX(162)
 	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
 	doc.pdf.Rect(160, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalTax), "0", 0, "L", false, 0, "")
+	doc.pdf.CellFormat(40, 10, doc.encodeString(ac.FormatMoneyDecimal(totalTax)), "0", 0, "L", false, 0, "")
 
 	// Draw TOTAL TTC title
 	doc.pdf.SetY(doc.pdf.GetY() + 10)
 	doc.pdf.SetX(120)
 	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
 	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(38, 10, encodeString(doc.Options.TextTotalWithTax), "0", 0, "R", false, 0, "")
+	doc.pdf.CellFormat(38, 10, doc.encodeString(doc.Options.TextTotalWithTax), "0", 0, "R", false, 0, "")
 
 	// Draw TOTAL TTC amount
 	doc.pdf.SetX(162)
 	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
 	doc.pdf.Rect(160, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(40, 10, ac.FormatMoneyDecimal(totalWithTax), "0", 0, "L", false, 0, "")
+	doc.pdf.CellFormat(40, 10, doc.encodeString(ac.FormatMoneyDecimal(totalWithTax)), "0", 0, "L", false, 0, "")
 }
 
 func (doc *Document) appendPaymentTerm() {
 	if len(doc.PaymentTerm) > 0 {
 		paymentTermString := fmt.Sprintf(
 			"%s: %s",
-			encodeString(doc.Options.TextPaymentTermTitle),
-			encodeString(doc.PaymentTerm),
+			doc.encodeString(doc.Options.TextPaymentTermTitle),
+			doc.encodeString(doc.PaymentTerm),
 		)
 		doc.pdf.SetY(doc.pdf.GetY() + 15)
 
 		doc.pdf.SetX(120)
-		doc.pdf.SetFont("Helvetica", "B", 10)
-		doc.pdf.CellFormat(80, 4, paymentTermString, "0", 0, "R", false, 0, "")
+		doc.pdf.SetFont(doc.Options.BoldFont, "B", 10)
+		doc.pdf.CellFormat(80, 4, doc.encodeString(paymentTermString), "0", 0, "R", false, 0, "")
 	}
 }

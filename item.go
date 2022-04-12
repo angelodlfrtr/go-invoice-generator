@@ -80,7 +80,7 @@ func (i *Item) taxWithDiscount() decimal.Decimal {
 
 func (i *Item) appendColTo(options *Options, doc *Document) {
 	ac := accounting.Accounting{
-		Symbol:    encodeString(options.CurrencySymbol),
+		Symbol:    options.CurrencySymbol,
 		Precision: options.CurrencyPrecision,
 		Thousand:  options.CurrencyThousand,
 		Decimal:   options.CurrencyDecimal,
@@ -94,7 +94,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.MultiCell(
 		ItemColUnitPriceOffset-ItemColNameOffset,
 		3,
-		encodeString(i.Name),
+		doc.encodeString(i.Name),
 		"",
 		"",
 		false,
@@ -105,7 +105,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.SetX(ItemColNameOffset)
 		doc.pdf.SetY(doc.pdf.GetY() + 1)
 
-		doc.pdf.SetFont("Helvetica", "", SmallTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.GreyTextColor[0],
 			doc.Options.GreyTextColor[1],
@@ -115,14 +115,14 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.MultiCell(
 			ItemColUnitPriceOffset-ItemColNameOffset,
 			3,
-			encodeString(i.Description),
+			doc.encodeString(i.Description),
 			"",
 			"",
 			false,
 		)
 
 		// Reset font
-		doc.pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.BaseTextColor[0],
 			doc.Options.BaseTextColor[1],
@@ -139,7 +139,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		ItemColQuantityOffset-ItemColUnitPriceOffset,
 		colHeight,
-		ac.FormatMoneyDecimal(i.unitCost()),
+		doc.encodeString(ac.FormatMoneyDecimal(i.unitCost())),
 		"0",
 		0,
 		"",
@@ -153,7 +153,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		ItemColTaxOffset-ItemColQuantityOffset,
 		colHeight,
-		i.quantity().String(),
+		doc.encodeString(i.quantity().String()),
 		"0",
 		0,
 		"",
@@ -167,7 +167,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		ItemColTaxOffset-ItemColTotalHTOffset,
 		colHeight,
-		ac.FormatMoneyDecimal(i.totalWithoutTax()),
+		doc.encodeString(ac.FormatMoneyDecimal(i.totalWithoutTax())),
 		"0",
 		0,
 		"",
@@ -182,7 +182,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.CellFormat(
 			ItemColTotalTTCOffset-ItemColDiscountOffset,
 			colHeight,
-			"--",
+			doc.encodeString("--"),
 			"0",
 			0,
 			"",
@@ -197,13 +197,13 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		var discountDesc string
 
 		if discountType == "percent" {
-			discountTitle = fmt.Sprintf("%s %s", discountAmount, encodeString("%"))
+			discountTitle = fmt.Sprintf("%s %s", discountAmount, doc.encodeString("%"))
 			// get amount from percent
 			dCost := i.totalWithoutTax()
 			dAmount := dCost.Mul(discountAmount.Div(decimal.NewFromFloat(100)))
 			discountDesc = fmt.Sprintf("-%s", ac.FormatMoneyDecimal(dAmount))
 		} else {
-			discountTitle = fmt.Sprintf("%s %s", discountAmount, encodeString("€"))
+			discountTitle = fmt.Sprintf("%s %s", discountAmount, doc.encodeString("€"))
 			dCost := i.totalWithoutTax()
 			dPerc := discountAmount.Mul(decimal.NewFromFloat(100))
 			dPerc = dPerc.Div(dCost)
@@ -216,7 +216,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.CellFormat(
 			ItemColTotalTTCOffset-ItemColDiscountOffset,
 			colHeight/2,
-			discountTitle,
+			doc.encodeString(discountTitle),
 			"0",
 			0,
 			"LB",
@@ -227,7 +227,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 
 		// discount desc
 		doc.pdf.SetXY(ItemColDiscountOffset, baseY+(colHeight/2))
-		doc.pdf.SetFont("Helvetica", "", SmallTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.GreyTextColor[0],
 			doc.Options.GreyTextColor[1],
@@ -237,7 +237,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.CellFormat(
 			ItemColTotalTTCOffset-ItemColDiscountOffset,
 			colHeight/2,
-			discountDesc,
+			doc.encodeString(discountDesc),
 			"0",
 			0,
 			"LT",
@@ -247,7 +247,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		)
 
 		// reset font and y
-		doc.pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.BaseTextColor[0],
 			doc.Options.BaseTextColor[1],
@@ -263,7 +263,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.CellFormat(
 			ItemColDiscountOffset-ItemColTaxOffset,
 			colHeight,
-			"--",
+			doc.encodeString("--"),
 			"0",
 			0,
 			"",
@@ -278,13 +278,13 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		var taxDesc string
 
 		if taxType == "percent" {
-			taxTitle = fmt.Sprintf("%s %s", taxAmount, encodeString("%"))
+			taxTitle = fmt.Sprintf("%s %s", taxAmount, "%")
 			// get amount from percent
 			dCost := i.totalWithoutTaxAndWithDiscount()
 			dAmount := dCost.Mul(taxAmount.Div(decimal.NewFromFloat(100)))
 			taxDesc = ac.FormatMoneyDecimal(dAmount)
 		} else {
-			taxTitle = fmt.Sprintf("%s %s", taxAmount, encodeString("€"))
+			taxTitle = fmt.Sprintf("%s %s", taxAmount, "€")
 			dCost := i.totalWithoutTaxAndWithDiscount()
 			dPerc := taxAmount.Mul(decimal.NewFromFloat(100))
 			dPerc = dPerc.Div(dCost)
@@ -297,7 +297,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.CellFormat(
 			ItemColDiscountOffset-ItemColTaxOffset,
 			colHeight/2,
-			taxTitle,
+			doc.encodeString(taxTitle),
 			"0",
 			0,
 			"LB",
@@ -308,7 +308,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 
 		// tax desc
 		doc.pdf.SetXY(ItemColTaxOffset, baseY+(colHeight/2))
-		doc.pdf.SetFont("Helvetica", "", SmallTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.GreyTextColor[0],
 			doc.Options.GreyTextColor[1],
@@ -318,7 +318,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		doc.pdf.CellFormat(
 			ItemColDiscountOffset-ItemColTaxOffset,
 			colHeight/2,
-			taxDesc,
+			doc.encodeString(taxDesc),
 			"0",
 			0,
 			"LT",
@@ -328,7 +328,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		)
 
 		// reset font and y
-		doc.pdf.SetFont("Helvetica", "", BaseTextFontSize)
+		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
 		doc.pdf.SetTextColor(
 			doc.Options.BaseTextColor[0],
 			doc.Options.BaseTextColor[1],
@@ -342,7 +342,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		190-ItemColTotalTTCOffset,
 		colHeight,
-		ac.FormatMoneyDecimal(i.totalWithTaxAndDiscount()),
+		doc.encodeString(ac.FormatMoneyDecimal(i.totalWithTaxAndDiscount())),
 		"0",
 		0,
 		"",

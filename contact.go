@@ -28,10 +28,13 @@ func (c *Contact) appendContactTODoc(
 	if c.Logo != nil {
 		// Create filename
 		fileName := b64.StdEncoding.EncodeToString([]byte(c.Name))
+
 		// Create reader from logo bytes
 		ioReader := bytes.NewReader(*c.Logo)
+
 		// Get image format
 		_, format, _ := image.DecodeConfig(bytes.NewReader(*c.Logo))
+
 		// Register image in pdf
 		imageInfo := doc.pdf.RegisterImageOptionsReader(fileName, gofpdf.ImageOptions{
 			ImageType: format,
@@ -40,9 +43,7 @@ func (c *Contact) appendContactTODoc(
 		if imageInfo != nil {
 			var imageOpt gofpdf.ImageOptions
 			imageOpt.ImageType = format
-
 			doc.pdf.ImageOptions(fileName, doc.pdf.GetX(), y, 0, 30, false, imageOpt, 0, "")
-
 			doc.pdf.SetY(y + 30)
 		}
 	}
@@ -65,9 +66,9 @@ func (c *Contact) appendContactTODoc(
 	doc.pdf.Rect(x, doc.pdf.GetY(), 70, 8, "F")
 
 	// Set name
-	doc.pdf.SetFont("Helvetica", "B", 10)
-	doc.pdf.Cell(40, 8, c.Name)
-	doc.pdf.SetFont("Helvetica", "", 10)
+	doc.pdf.SetFont(doc.Options.BoldFont, "B", 10)
+	doc.pdf.Cell(40, 8, doc.encodeString(c.Name))
+	doc.pdf.SetFont(doc.Options.Font, "", 10)
 
 	if c.Address != nil {
 		// Address rect
@@ -84,9 +85,9 @@ func (c *Contact) appendContactTODoc(
 		doc.pdf.Rect(x, doc.pdf.GetY()+9, 70, addrRectHeight, "F")
 
 		// Set address
-		doc.pdf.SetFont("Helvetica", "", 10)
+		doc.pdf.SetFont(doc.Options.Font, "", 10)
 		doc.pdf.SetXY(x, doc.pdf.GetY()+10)
-		doc.pdf.MultiCell(70, 5, c.Address.ToString(), "0", "L", false)
+		doc.pdf.MultiCell(70, 5, doc.encodeString(c.Address.ToString()), "0", "L", false)
 	}
 
 	return doc.pdf.GetY()
