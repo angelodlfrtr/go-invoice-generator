@@ -69,4 +69,4 @@ tags
 
 # End of https://www.gitignore.io/api/go,osx,vim
 
-/out.pdf
+out.pdf
