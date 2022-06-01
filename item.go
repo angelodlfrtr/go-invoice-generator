@@ -284,7 +284,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 			dAmount := dCost.Mul(taxAmount.Div(decimal.NewFromFloat(100)))
 			taxDesc = ac.FormatMoneyDecimal(dAmount)
 		} else {
-			taxTitle = fmt.Sprintf("%s %s", taxAmount, "€")
+			taxTitle = fmt.Sprintf("%s %s", ac.Symbol, taxAmount)
 			dCost := i.totalWithoutTaxAndWithDiscount()
 			dPerc := taxAmount.Mul(decimal.NewFromFloat(100))
 			dPerc = dPerc.Div(dCost)
