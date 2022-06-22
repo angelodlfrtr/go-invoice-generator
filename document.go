@@ -1,10 +1,12 @@
 package generator
 
-import "github.com/jung-kurt/gofpdf"
+import (
+	"github.com/go-pdf/fpdf"
+)
 
 // Document define base document
 type Document struct {
-	pdf *gofpdf.Fpdf
+	pdf *fpdf.Fpdf
 
 	Options      *Options      `json:"options,omitempty"`
 	Header       *HeaderFooter `json:"header,omitempty"`
@@ -25,13 +27,13 @@ type Document struct {
 	Discount     *Discount     `json:"discount,omitempty"`
 }
 
-// Pdf returns the underlying *gofpdf.Fpdf used to build document
-func (doc *Document) Pdf() *gofpdf.Fpdf {
+// Pdf returns the underlying *fpdf.Fpdf used to build document
+func (doc *Document) Pdf() *fpdf.Fpdf {
 	return doc.pdf
 }
 
 // SetUnicodeTranslator to use
-// See https://pkg.go.dev/github.com/jung-kurt/gofpdf#UnicodeTranslator
+// See https://pkg.go.dev/github.com/go-pdf/fpdf#UnicodeTranslator
 func (doc *Document) SetUnicodeTranslator(fn UnicodeTranslateFunc) {
 	doc.Options.UnicodeTranslateFunc = fn
 }

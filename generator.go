@@ -3,7 +3,7 @@ package generator
 
 import (
 	"github.com/creasty/defaults"
-	"github.com/jung-kurt/gofpdf"
+	"github.com/go-pdf/fpdf"
 )
 
 // New return a new documents with provided types and defaults
@@ -15,7 +15,7 @@ func New(docType string, options *Options) (*Document, error) {
 		Type:    docType,
 	}
 
-	doc.pdf = gofpdf.New("P", "mm", "A4", "")
+	doc.pdf = fpdf.New("P", "mm", "A4", "")
 	doc.Options.UnicodeTranslateFunc = doc.pdf.UnicodeTranslatorFromDescriptor("")
 
 	return doc, nil

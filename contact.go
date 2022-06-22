@@ -5,7 +5,7 @@ import (
 	b64 "encoding/base64"
 	"image"
 
-	"github.com/jung-kurt/gofpdf"
+	"github.com/go-pdf/fpdf"
 )
 
 // Contact contact a company informations
@@ -36,12 +36,12 @@ func (c *Contact) appendContactTODoc(
 		_, format, _ := image.DecodeConfig(bytes.NewReader(*c.Logo))
 
 		// Register image in pdf
-		imageInfo := doc.pdf.RegisterImageOptionsReader(fileName, gofpdf.ImageOptions{
+		imageInfo := doc.pdf.RegisterImageOptionsReader(fileName, fpdf.ImageOptions{
 			ImageType: format,
 		}, ioReader)
 
 		if imageInfo != nil {
-			var imageOpt gofpdf.ImageOptions
+			var imageOpt fpdf.ImageOptions
 			imageOpt.ImageType = format
 			doc.pdf.ImageOptions(fileName, doc.pdf.GetX(), y, 0, 30, false, imageOpt, 0, "")
 			doc.pdf.SetY(y + 30)

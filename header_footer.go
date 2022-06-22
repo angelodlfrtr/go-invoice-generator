@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/creasty/defaults"
-	"github.com/jung-kurt/gofpdf"
+	"github.com/go-pdf/fpdf"
 )
 
 // HeaderFooter define header or footer informations on document
@@ -18,7 +18,7 @@ type HeaderFooter struct {
 type fnc func()
 
 // ApplyFunc allow user to apply custom func
-func (hf *HeaderFooter) ApplyFunc(pdf *gofpdf.Fpdf, fn fnc) {
+func (hf *HeaderFooter) ApplyFunc(pdf *fpdf.Fpdf, fn fnc) {
 	pdf.SetHeaderFunc(fn)
 }
 
