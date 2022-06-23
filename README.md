@@ -1,3 +1,4 @@
+![golangci-lint](https://github.com/angelodlfrtr/go-invoice-generator/actions/workflows/golangci-lint.yml/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/angelodlfrtr/go-invoice-generator)](https://goreportcard.com/report/github.com/angelodlfrtr/go-invoice-generator)
 [![GoDoc](https://godoc.org/github.com/angelodlfrtr/go-invoice-generator?status.svg)](https://godoc.org/github.com/angelodlfrtr/go-invoice-generator)
 
