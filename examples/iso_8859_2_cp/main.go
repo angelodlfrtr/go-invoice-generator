@@ -4,8 +4,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/angelodlfrtr/go-invoice-generator"
-	"github.com/jung-kurt/gofpdf"
+	generator "github.com/angelodlfrtr/go-invoice-generator"
+	"github.com/go-pdf/fpdf"
 )
 
 func main() {
@@ -18,7 +18,7 @@ func main() {
 	// Set up translator
 	func() {
 		trReader, _ := os.Open("./iso-8859-2.map")
-		unicodeTranslator, _ := gofpdf.UnicodeTranslator(trReader)
+		unicodeTranslator, _ := fpdf.UnicodeTranslator(trReader)
 		doc.SetUnicodeTranslator(unicodeTranslator)
 	}()
 

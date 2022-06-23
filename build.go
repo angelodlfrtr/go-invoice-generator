@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jung-kurt/gofpdf"
+	"github.com/go-pdf/fpdf"
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
 )
 
 // Build pdf document from data provided
-func (doc *Document) Build() (*gofpdf.Fpdf, error) {
+func (doc *Document) Build() (*fpdf.Fpdf, error) {
 	// Validate document data
 	err := doc.Validate()
 	if err != nil {
