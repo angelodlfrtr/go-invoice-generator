@@ -23,7 +23,7 @@ func (doc *Document) TotalWithoutTax() decimal.Decimal {
 	if doc.Discount != nil {
 		discountType, discountNumber := doc.Discount.getDiscount()
 
-		if discountType == "amount" {
+		if discountType == DiscountTypeAmount {
 			total = total.Sub(discountNumber)
 		} else {
 			// Percent
@@ -55,7 +55,7 @@ func (doc *Document) Tax() decimal.Decimal {
 	} else {
 		discountType, discountAmount := doc.Discount.getDiscount()
 		discountPercent := discountAmount
-		if discountType == "amount" {
+		if discountType == DiscountTypeAmount {
 			// Get percent from total discounted
 			discountPercent = discountAmount.Mul(decimal.NewFromFloat(100)).Div(totalWithoutTax)
 		}
@@ -63,7 +63,7 @@ func (doc *Document) Tax() decimal.Decimal {
 		for _, item := range doc.Items {
 			if item.Tax != nil {
 				taxType, taxAmount := item.Tax.getTax()
-				if taxType == "amount" {
+				if taxType == TaxTypeAmount {
 					// If tax type is amount, just add amount to tax
 					totalTax = totalTax.Add(taxAmount)
 				} else {

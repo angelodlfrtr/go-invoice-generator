@@ -12,8 +12,7 @@ import (
 // Build pdf document from data provided
 func (doc *Document) Build() (*fpdf.Fpdf, error) {
 	// Validate document data
-	err := doc.Validate()
-	if err != nil {
+	if err := doc.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -28,18 +27,14 @@ func (doc *Document) Build() (*fpdf.Fpdf, error) {
 
 	// Set header
 	if doc.Header != nil {
-		err = doc.Header.applyHeader(doc)
-
-		if err != nil {
+		if err := doc.Header.applyHeader(doc); err != nil {
 			return nil, err
 		}
 	}
 
 	// Set footer
 	if doc.Footer != nil {
-		err = doc.Footer.applyFooter(doc)
-
-		if err != nil {
+		if err := doc.Footer.applyFooter(doc); err != nil {
 			return nil, err
 		}
 	}
@@ -369,7 +364,7 @@ func (doc *Document) appendTotal() {
 
 		var descString bytes.Buffer
 		discountType, discountAmount := doc.Discount.getDiscount()
-		if discountType == "percent" {
+		if discountType == DiscountTypePercent {
 			descString.WriteString("-")
 			descString.WriteString(discountAmount.String())
 			descString.WriteString(" % / -")

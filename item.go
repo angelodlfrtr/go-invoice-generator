@@ -14,18 +14,42 @@ type Item struct {
 	Quantity    string    `json:"quantity,omitempty"`
 	Tax         *Tax      `json:"tax,omitempty"`
 	Discount    *Discount `json:"discount,omitempty"`
+
+	_unitCost decimal.Decimal
+	_quantity decimal.Decimal
 }
 
-// unitCost returns the item unit cost
-func (i *Item) unitCost() decimal.Decimal {
-	unitCost, _ := decimal.NewFromString(i.UnitCost)
-	return unitCost
-}
+// Prepare convert strings to decimal
+func (i *Item) Prepare() error {
+	// Unit cost
+	unitCost, err := decimal.NewFromString(i.UnitCost)
+	if err != nil {
+		return err
+	}
+	i._unitCost = unitCost
 
-// quantity returns the item quantity
-func (i *Item) quantity() decimal.Decimal {
-	quantity, _ := decimal.NewFromString(i.Quantity)
-	return quantity
+	// Quantity
+	quantity, err := decimal.NewFromString(i.Quantity)
+	if err != nil {
+		return err
+	}
+	i._quantity = quantity
+
+	// Tax
+	if i.Tax != nil {
+		if err := i.Tax.Prepare(); err != nil {
+			return err
+		}
+	}
+
+	// Discount
+	if i.Discount != nil {
+		if err := i.Discount.Prepare(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // TotalWithoutTaxAndWithoutDiscount returns the total without tax and without discount
@@ -45,7 +69,7 @@ func (i *Item) TotalWithoutTaxAndWithDiscount() decimal.Decimal {
 	if i.Discount != nil {
 		dType, dNum := i.Discount.getDiscount()
 
-		if dType == "amount" {
+		if dType == DiscountTypeAmount {
 			total = total.Sub(dNum)
 		} else {
 			// Percent
@@ -73,7 +97,7 @@ func (i *Item) TaxWithTotalDiscounted() decimal.Decimal {
 	totalHT := i.TotalWithoutTaxAndWithDiscount()
 	taxType, taxAmount := i.Tax.getTax()
 
-	if taxType == "amount" {
+	if taxType == TaxTypeAmount {
 		result = taxAmount
 	} else {
 		divider := decimal.NewFromFloat(100)
@@ -138,7 +162,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		ItemColQuantityOffset-ItemColUnitPriceOffset,
 		colHeight,
-		doc.encodeString(doc.ac.FormatMoneyDecimal(i.unitCost())),
+		doc.encodeString(doc.ac.FormatMoneyDecimal(i._unitCost)),
 		"0",
 		0,
 		"",
@@ -152,7 +176,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		ItemColTaxOffset-ItemColQuantityOffset,
 		colHeight,
-		doc.encodeString(i.quantity().String()),
+		doc.encodeString(i._quantity.String()),
 		"0",
 		0,
 		"",
@@ -196,7 +220,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		var discountDesc string
 
 		dCost := i.TotalWithoutTaxAndWithoutDiscount()
-		if discountType == "percent" {
+		if discountType == DiscountTypePercent {
 			discountTitle = fmt.Sprintf("%s %s", discountAmount, doc.encodeString("%"))
 
 			// get amount from percent
@@ -277,7 +301,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		var taxTitle string
 		var taxDesc string
 
-		if taxType == "percent" {
+		if taxType == TaxTypePercent {
 			taxTitle = fmt.Sprintf("%s %s", taxAmount, "%")
 			// get amount from percent
 			dCost := i.TotalWithoutTaxAndWithDiscount()
