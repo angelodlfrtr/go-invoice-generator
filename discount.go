@@ -10,6 +10,7 @@ type Discount struct {
 	Amount  string `json:"amount,omitempty"`  // Discount in amount ex 123.40
 }
 
+// getDiscount as return the discount type and value
 func (t *Discount) getDiscount() (string, decimal.Decimal) {
 	tax := "0"
 	taxType := "percent"

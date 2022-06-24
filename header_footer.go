@@ -22,6 +22,7 @@ func (hf *HeaderFooter) ApplyFunc(pdf *fpdf.Fpdf, fn fnc) {
 	pdf.SetHeaderFunc(fn)
 }
 
+// applyHeader apply header to document
 func (hf *HeaderFooter) applyHeader(doc *Document) error {
 	if err := defaults.Set(hf); err != nil {
 		return err
@@ -71,6 +72,7 @@ func (hf *HeaderFooter) applyHeader(doc *Document) error {
 	return nil
 }
 
+// applyFooter apply footer to document
 func (hf *HeaderFooter) applyFooter(doc *Document) error {
 	if err := defaults.Set(hf); err != nil {
 		return err

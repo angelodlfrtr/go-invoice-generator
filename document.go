@@ -2,11 +2,13 @@ package generator
 
 import (
 	"github.com/go-pdf/fpdf"
+	"github.com/leekchan/accounting"
 )
 
 // Document define base document
 type Document struct {
 	pdf *fpdf.Fpdf
+	ac  accounting.Accounting
 
 	Options      *Options      `json:"options,omitempty"`
 	Header       *HeaderFooter `json:"header,omitempty"`
@@ -38,10 +40,12 @@ func (doc *Document) SetUnicodeTranslator(fn UnicodeTranslateFunc) {
 	doc.Options.UnicodeTranslateFunc = fn
 }
 
+// encodeString encodes the string using doc.Options.UnicodeTranslateFunc
 func (doc *Document) encodeString(str string) string {
 	return doc.Options.UnicodeTranslateFunc(str)
 }
 
+// typeAsString return the document type as string
 func (d *Document) typeAsString() string {
 	if d.Type == Invoice {
 		return d.Options.TextTypeInvoice

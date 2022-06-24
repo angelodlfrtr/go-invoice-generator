@@ -10,6 +10,7 @@ type Tax struct {
 	Amount  string `json:"amount,omitempty"`  // Tax in amount ex 123.40
 }
 
+// getTax return the tax type and value
 func (t *Tax) getTax() (string, decimal.Decimal) {
 	tax := "0"
 	taxType := "percent"

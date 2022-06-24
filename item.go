@@ -3,7 +3,6 @@ package generator
 import (
 	"fmt"
 
-	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
 )
 
@@ -17,17 +16,20 @@ type Item struct {
 	Discount    *Discount `json:"discount,omitempty"`
 }
 
+// unitCost returns the item unit cost
 func (i *Item) unitCost() decimal.Decimal {
 	unitCost, _ := decimal.NewFromString(i.UnitCost)
 	return unitCost
 }
 
+// quantity returns the item quantity
 func (i *Item) quantity() decimal.Decimal {
 	quantity, _ := decimal.NewFromString(i.Quantity)
 	return quantity
 }
 
-func (i *Item) totalWithoutTax() decimal.Decimal {
+// TotalWithoutTaxAndWithoutDiscount returns the total without tax and without discount
+func (i *Item) TotalWithoutTaxAndWithoutDiscount() decimal.Decimal {
 	quantity, _ := decimal.NewFromString(i.Quantity)
 	price, _ := decimal.NewFromString(i.UnitCost)
 	total := price.Mul(quantity)
@@ -35,8 +37,9 @@ func (i *Item) totalWithoutTax() decimal.Decimal {
 	return total
 }
 
-func (i *Item) totalWithoutTaxAndWithDiscount() decimal.Decimal {
-	total := i.totalWithoutTax()
+// TotalWithoutTaxAndWithDiscount returns the total without tax and with discount
+func (i *Item) TotalWithoutTaxAndWithDiscount() decimal.Decimal {
+	total := i.TotalWithoutTaxAndWithoutDiscount()
 
 	// Check discount
 	if i.Discount != nil {
@@ -54,18 +57,20 @@ func (i *Item) totalWithoutTaxAndWithDiscount() decimal.Decimal {
 	return total
 }
 
-func (i *Item) totalWithTaxAndDiscount() decimal.Decimal {
-	return i.totalWithoutTaxAndWithDiscount().Add(i.taxWithDiscount())
+// TotalWithTaxAndDiscount returns the total with tax and discount
+func (i *Item) TotalWithTaxAndDiscount() decimal.Decimal {
+	return i.TotalWithoutTaxAndWithDiscount().Add(i.TaxWithTotalDiscounted())
 }
 
-func (i *Item) taxWithDiscount() decimal.Decimal {
+// TaxWithTotalDiscounted returns the tax with total discounted
+func (i *Item) TaxWithTotalDiscounted() decimal.Decimal {
 	result := decimal.NewFromFloat(0)
 
 	if i.Tax == nil {
 		return result
 	}
 
-	totalHT := i.totalWithoutTaxAndWithDiscount()
+	totalHT := i.TotalWithoutTaxAndWithDiscount()
 	taxType, taxAmount := i.Tax.getTax()
 
 	if taxType == "amount" {
@@ -78,14 +83,8 @@ func (i *Item) taxWithDiscount() decimal.Decimal {
 	return result
 }
 
+// appendColTo document doc
 func (i *Item) appendColTo(options *Options, doc *Document) {
-	ac := accounting.Accounting{
-		Symbol:    options.CurrencySymbol,
-		Precision: options.CurrencyPrecision,
-		Thousand:  options.CurrencyThousand,
-		Decimal:   options.CurrencyDecimal,
-	}
-
 	// Get base Y (top of line)
 	baseY := doc.pdf.GetY()
 
@@ -139,7 +138,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		ItemColQuantityOffset-ItemColUnitPriceOffset,
 		colHeight,
-		doc.encodeString(ac.FormatMoneyDecimal(i.unitCost())),
+		doc.encodeString(doc.ac.FormatMoneyDecimal(i.unitCost())),
 		"0",
 		0,
 		"",
@@ -167,7 +166,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		ItemColTaxOffset-ItemColTotalHTOffset,
 		colHeight,
-		doc.encodeString(ac.FormatMoneyDecimal(i.totalWithoutTax())),
+		doc.encodeString(doc.ac.FormatMoneyDecimal(i.TotalWithoutTaxAndWithoutDiscount())),
 		"0",
 		0,
 		"",
@@ -196,18 +195,19 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		var discountTitle string
 		var discountDesc string
 
+		dCost := i.TotalWithoutTaxAndWithoutDiscount()
 		if discountType == "percent" {
 			discountTitle = fmt.Sprintf("%s %s", discountAmount, doc.encodeString("%"))
+
 			// get amount from percent
-			dCost := i.totalWithoutTax()
 			dAmount := dCost.Mul(discountAmount.Div(decimal.NewFromFloat(100)))
-			discountDesc = fmt.Sprintf("-%s", ac.FormatMoneyDecimal(dAmount))
+			discountDesc = fmt.Sprintf("-%s", doc.ac.FormatMoneyDecimal(dAmount))
 		} else {
 			discountTitle = fmt.Sprintf("%s %s", discountAmount, doc.encodeString("€"))
-			dCost := i.totalWithoutTax()
+
+			// get percent from amount
 			dPerc := discountAmount.Mul(decimal.NewFromFloat(100))
 			dPerc = dPerc.Div(dCost)
-			// get percent from amount
 			discountDesc = fmt.Sprintf("-%s %%", dPerc.StringFixed(2))
 		}
 
@@ -280,12 +280,12 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 		if taxType == "percent" {
 			taxTitle = fmt.Sprintf("%s %s", taxAmount, "%")
 			// get amount from percent
-			dCost := i.totalWithoutTaxAndWithDiscount()
+			dCost := i.TotalWithoutTaxAndWithDiscount()
 			dAmount := dCost.Mul(taxAmount.Div(decimal.NewFromFloat(100)))
-			taxDesc = ac.FormatMoneyDecimal(dAmount)
+			taxDesc = doc.ac.FormatMoneyDecimal(dAmount)
 		} else {
-			taxTitle = fmt.Sprintf("%s %s", ac.Symbol, taxAmount)
-			dCost := i.totalWithoutTaxAndWithDiscount()
+			taxTitle = fmt.Sprintf("%s %s", doc.ac.Symbol, taxAmount)
+			dCost := i.TotalWithoutTaxAndWithDiscount()
 			dPerc := taxAmount.Mul(decimal.NewFromFloat(100))
 			dPerc = dPerc.Div(dCost)
 			// get percent from amount
@@ -342,7 +342,7 @@ func (i *Item) appendColTo(options *Options, doc *Document) {
 	doc.pdf.CellFormat(
 		190-ItemColTotalTTCOffset,
 		colHeight,
-		doc.encodeString(ac.FormatMoneyDecimal(i.totalWithTaxAndDiscount())),
+		doc.encodeString(doc.ac.FormatMoneyDecimal(i.TotalWithTaxAndDiscount())),
 		"0",
 		0,
 		"",

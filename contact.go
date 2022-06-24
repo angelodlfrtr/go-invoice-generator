@@ -15,6 +15,7 @@ type Contact struct {
 	Address *Address `json:"address,omitempty"`
 }
 
+// appendContactTODoc append the contact to the document
 func (c *Contact) appendContactTODoc(
 	x float64,
 	y float64,
@@ -93,11 +94,13 @@ func (c *Contact) appendContactTODoc(
 	return doc.pdf.GetY()
 }
 
+// appendCompanyContactToDoc append the company contact to the document
 func (c *Contact) appendCompanyContactToDoc(doc *Document) float64 {
 	x, y, _, _ := doc.pdf.GetMargins()
 	return c.appendContactTODoc(x, y, true, "L", doc)
 }
 
+// appendCustomerContactToDoc append the customer contact to the document
 func (c *Contact) appendCustomerContactToDoc(doc *Document) float64 {
 	return c.appendContactTODoc(130, BaseMarginTop+25, true, "R", doc)
 }
