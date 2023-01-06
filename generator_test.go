@@ -1,20 +1,36 @@
 package generator
 
 import (
+	"errors"
 	"os"
 	"testing"
 )
 
+func TestNewWithInvalidType(t *testing.T) {
+	_, err := New("INVALID", &Options{})
+
+	if errors.Is(err, ErrInvalidDocumentType) {
+		return
+	}
+
+	t.Fatalf("expected ErrInvalidDocumentType, got %v", err)
+}
+
 func TestNew(t *testing.T) {
-	doc, _ := New(Invoice, &Options{
-		TextTypeInvoice: "FACTURE",
-		TextRefTitle:    "Réàf.",
-		AutoPrint:       true,
-		BaseTextColor:   []int{6, 63, 156},
-		GreyTextColor:   []int{161, 96, 149},
-		GreyBgColor:     []int{171, 240, 129},
-		DarkBgColor:     []int{176, 12, 20},
+	doc, err := New(Invoice, &Options{
+		TextTypeInvoice:   "FACTURE",
+		TextRefTitle:      "Réàf.",
+		AutoPrint:         true,
+		BaseTextColor:     []int{6, 63, 156},
+		GreyTextColor:     []int{161, 96, 149},
+		GreyBgColor:       []int{171, 240, 129},
+		DarkBgColor:       []int{176, 12, 20},
+		CurrencyPrecision: 2,
 	})
+
+	if err != nil {
+		t.Fatalf("got error %v", err)
+	}
 
 	doc.SetHeader(&HeaderFooter{
 		Text:       "<center>Cupcake ipsum dolor sit amet bonbon. I love croissant cotton candy. Carrot cake sweet I love sweet roll cake powder.</center>",

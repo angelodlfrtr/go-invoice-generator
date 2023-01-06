@@ -2,14 +2,22 @@
 package generator
 
 import (
+	"errors"
+
 	"github.com/creasty/defaults"
 	"github.com/go-pdf/fpdf"
 	"github.com/leekchan/accounting"
 )
 
+var ErrInvalidDocumentType = errors.New("invalid document type")
+
 // New return a new documents with provided types and defaults
 func New(docType string, options *Options) (*Document, error) {
 	_ = defaults.Set(options)
+
+	if docType != Invoice && docType != Quotation && docType != DeliveryNote {
+		return nil, ErrInvalidDocumentType
+	}
 
 	doc := &Document{
 		Options: options,
