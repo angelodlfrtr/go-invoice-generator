@@ -63,6 +63,7 @@ func TestNew(t *testing.T) {
 			City:       "Paris",
 			Country:    "France",
 		},
+		AddtionnalInfo: []string{"Cupcake: ipsum dolor"},
 	})
 
 	doc.SetCustomer(&Contact{
@@ -72,6 +73,10 @@ func TestNew(t *testing.T) {
 			PostalCode: "29200",
 			City:       "Brest",
 			Country:    "France",
+		},
+		AddtionnalInfo: []string{
+			"Cupcake: ipsum dolor",
+			"Cupcake: ipsum dolo r",
 		},
 	})
 
