@@ -11,7 +11,7 @@ import (
 // Contact contact a company informations
 type Contact struct {
 	Name    string   `json:"name,omitempty" validate:"required,min=1,max=256"`
-	Logo    *[]byte  `json:"logo,omitempty"` // Logo byte array
+	Logo    []byte   `json:"logo,omitempty"` // Logo byte array
 	Address *Address `json:"address,omitempty"`
 }
 
@@ -31,10 +31,10 @@ func (c *Contact) appendContactTODoc(
 		fileName := b64.StdEncoding.EncodeToString([]byte(c.Name))
 
 		// Create reader from logo bytes
-		ioReader := bytes.NewReader(*c.Logo)
+		ioReader := bytes.NewReader(c.Logo)
 
 		// Get image format
-		_, format, _ := image.DecodeConfig(bytes.NewReader(*c.Logo))
+		_, format, _ := image.DecodeConfig(bytes.NewReader(c.Logo))
 
 		// Register image in pdf
 		imageInfo := doc.pdf.RegisterImageOptionsReader(fileName, fpdf.ImageOptions{

@@ -55,7 +55,7 @@ func TestNew(t *testing.T) {
 
 	doc.SetCompany(&Contact{
 		Name: "Test Company",
-		Logo: &logoBytes,
+		Logo: logoBytes,
 		Address: &Address{
 			Address:    "89 Rue de Brest",
 			Address2:   "Appartement 2",
