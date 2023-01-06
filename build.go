@@ -376,7 +376,7 @@ func (doc *Document) appendTotal() {
 			descString.WriteString(doc.ac.FormatMoneyDecimal(discountAmount))
 			descString.WriteString(" / -")
 			descString.WriteString(
-				discountAmount.Mul(decimal.NewFromFloat(100)).Div(doc.TotalWithoutTax()).StringFixed(2),
+				discountAmount.Mul(decimal.NewFromFloat(100)).Div(doc.TotalWithoutTaxAndWithoutDocumentDiscount()).StringFixed(2),
 			)
 			descString.WriteString(" %")
 		}

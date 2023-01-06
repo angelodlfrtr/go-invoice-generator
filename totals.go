@@ -45,7 +45,7 @@ func (doc *Document) TotalWithTax() decimal.Decimal {
 
 // Tax return the total tax with document discount
 func (doc *Document) Tax() decimal.Decimal {
-	totalWithoutTax := doc.TotalWithoutTax()
+	totalWithoutTaxAndWithoutDocDiscount := doc.TotalWithoutTaxAndWithoutDocumentDiscount()
 	totalTax := decimal.NewFromFloat(0)
 
 	if doc.Discount == nil {
@@ -57,7 +57,7 @@ func (doc *Document) Tax() decimal.Decimal {
 		discountPercent := discountAmount
 		if discountType == DiscountTypeAmount {
 			// Get percent from total discounted
-			discountPercent = discountAmount.Mul(decimal.NewFromFloat(100)).Div(totalWithoutTax)
+			discountPercent = discountAmount.Mul(decimal.NewFromFloat(100)).Div(totalWithoutTaxAndWithoutDocDiscount)
 		}
 
 		for _, item := range doc.Items {
