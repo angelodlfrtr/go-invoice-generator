@@ -13,7 +13,7 @@ using https://github.com/go-pdf/fpdf.
 go get -u github.com/angelodlfrtr/go-invoice-generator
 ```
 
-## Exemple output
+## Example output
 
 ![DeliveryNoteExample](example.png)
 
