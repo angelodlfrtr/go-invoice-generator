@@ -54,11 +54,14 @@ func TestNew(t *testing.T) {
 	doc.SetDate("02/03/2021")
 	doc.SetPaymentTerm("02/04/2021")
 
-	logoBytes, _ := ioutil.ReadFile("./example_logo.png")
+	logoBytes, err := ioutil.ReadFile("./example_logo.png")
+    if err != nil {
+		log.Fatal(err)
+    }
 
 	doc.SetCompany(&generator.Contact{
 		Name: "Test Company",
-		Logo: &logoBytes,
+		Logo: logoBytes,
 		Address: &generator.Address{
 			Address:    "89 Rue de Brest",
 			Address2:   "Appartement 2",
@@ -84,7 +87,7 @@ func TestNew(t *testing.T) {
 			Description: "Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon",
 			UnitCost:    "99876.89",
 			Quantity:    "2",
-			Tax: &Tax{
+			Tax: &generator.Tax{
 				Percent: "20",
 			},
 		})
@@ -94,10 +97,10 @@ func TestNew(t *testing.T) {
 		Name:     "Test",
 		UnitCost: "99876.89",
 		Quantity: "2",
-		Tax: &Tax{
+		Tax: &generator.Tax{
 			Amount: "89",
 		},
-		Discount: &Discount{
+		Discount: &generator.Discount{
 			Percent: "30",
 		},
 	})
@@ -106,7 +109,7 @@ func TestNew(t *testing.T) {
 		Name:     "Test",
 		UnitCost: "3576.89",
 		Quantity: "2",
-		Discount: &Discount{
+		Discount: &generator.Discount{
 			Percent: "50",
 		},
 	})
@@ -115,7 +118,7 @@ func TestNew(t *testing.T) {
 		Name:     "Test",
 		UnitCost: "889.89",
 		Quantity: "2",
-		Discount: &Discount{
+		Discount: &generator.Discount{
 			Amount: "234.67",
 		},
 	})
