@@ -2,7 +2,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/wastedaccounts/go-invoice-generator)](https://goreportcard.com/report/github.com/wastedaccounts/go-invoice-generator)
 [![GoDoc](https://godoc.org/github.com/wastedaccounts/go-invoice-generator?status.svg)](https://godoc.org/github.com/wastedaccounts/go-invoice-generator)
 
-# Golang invoice generator
+# A Golang invoice generator
 
 A super fast golang package to generate invoices, delivery notes and quotations as pdf
 using https://github.com/go-pdf/fpdf.
