@@ -1,4 +1,4 @@
-module github.com/wastedaccounts/go-invoice-generator
+module github.com/WastedAccounts/go-invoice-generator
 
 go 1.17
 
