@@ -78,11 +78,6 @@ func (doc *Document) Build() (*fpdf.Fpdf, error) {
 		d.appendPaymentTerm()
 	})
 
-	// Append js to autoprint if AutoPrint == true
-	if doc.Options.AutoPrint {
-		doc.pdf.SetJavascript("print(true);")
-	}
-
 	return doc.pdf, nil
 }
 

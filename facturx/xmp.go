@@ -2,16 +2,16 @@ package facturx
 
 import (
 	"bytes"
+	"fmt"
 	"text/template"
+
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
-// xmpTemplate contains the Factur-X XMP metadata block. The xpacket begin
-// attribute must hold the UTF-8 BOM (U+FEFF), which cannot be a literal in a
-// Go source file, so it is injected via string concatenation.
-var xmpRaw = "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n" + `
-<x:xmpmeta xmlns:x="adobe:ns:meta/">
-  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-
+// fxXMPBlocksRaw are the three rdf:Description blocks injected into the
+// existing XMP packet. They must be placed before </rdf:RDF>.
+var fxXMPBlocksRaw = `
     <rdf:Description rdf:about=""
         xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
       <pdfaid:part>3</pdfaid:part>
@@ -68,18 +68,15 @@ var xmpRaw = "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>
       <fx:Version>1.0</fx:Version>
       <fx:ConformanceLevel>{{.Profile}}</fx:ConformanceLevel>
     </rdf:Description>
-
-  </rdf:RDF>
-</x:xmpmeta>
-<?xpacket end="w"?>`
+`
 
 type xmpData struct {
 	Profile string
 }
 
-// buildXMP returns the XMP metadata bytes for the given Factur-X profile.
-func buildXMP(profile Profile) ([]byte, error) {
-	tmpl, err := template.New("xmp").Parse(xmpRaw)
+// buildFXXMPBlocks returns the rendered Factur-X rdf:Description blocks.
+func buildFXXMPBlocks(profile Profile) ([]byte, error) {
+	tmpl, err := template.New("xmp").Parse(fxXMPBlocksRaw)
 	if err != nil {
 		return nil, err
 	}
@@ -88,4 +85,58 @@ func buildXMP(profile Profile) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// mergeXMPInContext locates the PDF's existing XMP metadata stream via the pdfcpu
+// context, decodes it, injects Factur-X rdf:Description blocks before </rdf:RDF>,
+// and re-encodes the stream. All changes stay within the context so that pdfcpu
+// writes correct byte offsets when serialising the PDF.
+func mergeXMPInContext(ctx *model.Context, profile Profile) error {
+	fxBlocks, err := buildFXXMPBlocks(profile)
+	if err != nil {
+		return err
+	}
+
+	catDict, err := ctx.Catalog()
+	if err != nil {
+		return fmt.Errorf("catalog: %w", err)
+	}
+
+	metaRef, ok := catDict["Metadata"].(types.IndirectRef)
+	if !ok {
+		return nil // no XMP packet — skip silently
+	}
+
+	entry, found := ctx.FindTableEntryForIndRef(&metaRef)
+	if !found || entry == nil {
+		return nil
+	}
+
+	sd, ok := entry.Object.(types.StreamDict)
+	if !ok {
+		return nil
+	}
+
+	if err := sd.Decode(); err != nil {
+		return fmt.Errorf("decode XMP stream: %w", err)
+	}
+
+	const rdfClose = "</rdf:RDF>"
+	idx := bytes.LastIndex(sd.Content, []byte(rdfClose))
+	if idx < 0 {
+		return nil // malformed XMP — skip
+	}
+
+	var merged bytes.Buffer
+	merged.Write(sd.Content[:idx])
+	merged.Write(fxBlocks)
+	merged.Write(sd.Content[idx:])
+	sd.Content = merged.Bytes()
+
+	if err := sd.Encode(); err != nil {
+		return fmt.Errorf("encode XMP stream: %w", err)
+	}
+
+	entry.Object = sd
+	return nil
 }

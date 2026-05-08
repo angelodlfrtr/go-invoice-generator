@@ -28,6 +28,7 @@
             gosec
             dprint
             gnumake
+            verapdf
           ];
         };
       }
