@@ -4,7 +4,7 @@ import (
 	"os"
 
 	generator "github.com/angelodlfrtr/go-invoice-generator"
-	"github.com/go-pdf/fpdf"
+	"codeberg.org/go-pdf/fpdf"
 )
 
 func main() {

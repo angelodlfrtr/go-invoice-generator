@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/creasty/defaults"
-	"github.com/go-pdf/fpdf"
+	"codeberg.org/go-pdf/fpdf"
 	"github.com/go-playground/validator/v10"
 	"github.com/leekchan/accounting"
 )
@@ -92,7 +92,7 @@ func (doc *Document) Pdf() *fpdf.Fpdf {
 }
 
 // SetUnicodeTranslator sets a custom unicode translation function.
-// See https://pkg.go.dev/github.com/go-pdf/fpdf#UnicodeTranslator
+// See https://pkg.go.dev/codeberg.org/go-pdf/fpdf#UnicodeTranslator
 func (doc *Document) SetUnicodeTranslator(fn UnicodeTranslateFunc) {
 	doc.Options.UnicodeTranslateFunc = fn
 }

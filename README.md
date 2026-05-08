@@ -1,11 +1,11 @@
-![golangci-lint](https://github.com/angelodlfrtr/go-invoice-generator/actions/workflows/golangci-lint.yml/badge.svg)
+[![ci](https://github.com/angelodlfrtr/go-invoice-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/angelodlfrtr/go-invoice-generator/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/angelodlfrtr/go-invoice-generator)](https://goreportcard.com/report/github.com/angelodlfrtr/go-invoice-generator)
 [![GoDoc](https://godoc.org/github.com/angelodlfrtr/go-invoice-generator?status.svg)](https://godoc.org/github.com/angelodlfrtr/go-invoice-generator)
 
 # go-invoice-generator
 
 A Go package for generating **invoices**, **delivery notes**, and **quotations** as PDF files,
-built on top of [go-pdf/fpdf](https://github.com/go-pdf/fpdf).
+built on top of [go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf).
 
 ## Features
 
@@ -335,14 +335,8 @@ doc.SetHeader(hf)
 ## Unicode support
 
 By default the document uses the `UnicodeTranslatorFromDescriptor("")` translator
-bundled with fpdf. To use a different encoding (e.g. ISO-8859-2):
-
-```go
-import "github.com/go-pdf/fpdf/contrib/gofpdf"
-
-translator := fpdf.UnicodeTranslatorFromDescriptor("iso-8859-2")
-doc.SetUnicodeTranslator(translator)
-```
+bundled with fpdf.
+To use a different encoding (e.g. ISO-8859-2), check `examples/iso_8859_2_cp`.
 
 ---
 

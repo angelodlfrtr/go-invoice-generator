@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/creasty/defaults"
-	"github.com/go-pdf/fpdf"
+	"codeberg.org/go-pdf/fpdf"
 )
 
 // HeaderFooter define header or footer informations on document

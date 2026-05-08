@@ -3,8 +3,8 @@ module github.com/angelodlfrtr/go-invoice-generator
 go 1.26.2
 
 require (
+	codeberg.org/go-pdf/fpdf v0.11.1
 	github.com/creasty/defaults v1.8.0
-	github.com/go-pdf/fpdf v0.9.0
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/leekchan/accounting v0.3.1
 	github.com/shopspring/decimal v1.4.0

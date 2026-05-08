@@ -5,7 +5,7 @@ import (
 	b64 "encoding/base64"
 	"image"
 
-	"github.com/go-pdf/fpdf"
+	"codeberg.org/go-pdf/fpdf"
 )
 
 func (c *Contact) appendContactTODoc(x, y float64, fill bool, logoAlign string, doc *Document) float64 {

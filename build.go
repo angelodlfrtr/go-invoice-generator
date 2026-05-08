@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-pdf/fpdf"
+	"codeberg.org/go-pdf/fpdf"
 	"github.com/shopspring/decimal"
 )
 
