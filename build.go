@@ -69,23 +69,14 @@ func (doc *Document) Build() (*fpdf.Fpdf, error) {
 	// Append items
 	doc.appendItems()
 
-	// Check page height (total bloc height = 30, 45 when doc discount)
-	offset := doc.pdf.GetY() + 30
-	if doc.Discount != nil {
-		offset += 15
-	}
-	if offset > MaxPageHeight {
-		doc.pdf.AddPage()
-	}
+	// Total and payment term share the right column and must stay together.
+	doc.pageTxn(func(d *Document) {
+		// Notes resets Y after rendering (left column, side-by-side with total).
+		d.appendNotes()
 
-	// Append notes
-	doc.appendNotes()
-
-	// Append total
-	doc.appendTotal()
-
-	// Append payment term
-	doc.appendPaymentTerm()
+		d.appendTotal()
+		d.appendPaymentTerm()
+	})
 
 	// Append js to autoprint if AutoPrint == true
 	if doc.Options.AutoPrint {

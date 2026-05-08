@@ -204,6 +204,25 @@ func (d *Document) fakePdfDoc() *Document {
 		panic(err)
 	}
 
+	// Copy data fields so conditional rendering logic (e.g. discount block in
+	// appendTotal, PaymentTerm guard in appendPaymentTerm) behaves identically
+	// in the probe and in the real render.
+	fakeDoc.Header = d.Header
+	fakeDoc.Footer = d.Footer
+	fakeDoc.Ref = d.Ref
+	fakeDoc.Version = d.Version
+	fakeDoc.ClientRef = d.ClientRef
+	fakeDoc.Description = d.Description
+	fakeDoc.Notes = d.Notes
+	fakeDoc.Company = d.Company
+	fakeDoc.Customer = d.Customer
+	fakeDoc.Items = d.Items
+	fakeDoc.Date = d.Date
+	fakeDoc.ValidityDate = d.ValidityDate
+	fakeDoc.PaymentTerm = d.PaymentTerm
+	fakeDoc.DefaultTax = d.DefaultTax
+	fakeDoc.Discount = d.Discount
+
 	pageCount := d.pdf.PageCount()
 	for i := 0; i < pageCount; i++ {
 		fakeDoc.pdf.AddPage()

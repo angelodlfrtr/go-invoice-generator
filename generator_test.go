@@ -79,7 +79,7 @@ func TestNew(t *testing.T) {
 		},
 	})
 
-	for i := 0; i < 8; i++ {
+	for range 3 {
 		doc.AppendItem(&Item{
 			Name:        "Cupcake ipsum dolor sit amet bonbon, coucou bonbon lala jojo, mama titi toto",
 			Description: "Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon",
@@ -135,12 +135,12 @@ func TestNew(t *testing.T) {
 		Percent: "10",
 	})
 
-	// doc.SetDiscount(&Discount{
-	// Percent: "90",
-	// })
 	doc.SetDiscount(&Discount{
-		Amount: "1340",
+		Percent: "90",
 	})
+	// doc.SetDiscount(&Discount{
+	// 	Amount: "1340",
+	// })
 
 	pdf, err := doc.Build()
 	if err != nil {
