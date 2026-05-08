@@ -49,3 +49,6 @@ jobs:
 
       - name: test
         run: nix develop --command make test
+
+      - name: Verapdf check PDF/A-3
+        run: nix develop --command make verapdf-check-3b

@@ -11,7 +11,6 @@ func main() {
 	doc, _ := generator.New(generator.Invoice, &generator.Options{
 		TextTypeInvoice: "FACTURE",
 		TextRefTitle:    "Ref",
-		AutoPrint:       true,
 		BaseTextColor:   []int{6, 63, 156},
 		GreyTextColor:   []int{161, 96, 149},
 		GreyBgColor:     []int{171, 240, 129},

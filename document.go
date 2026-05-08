@@ -49,7 +49,10 @@ func New(docType string, options *Options) (*Document, error) {
 	}
 
 	doc.pdf = fpdf.New("P", "mm", "A4", "")
-	doc.Options.UnicodeTranslateFunc = doc.pdf.UnicodeTranslatorFromDescriptor("")
+	registerDefaultFonts(doc.pdf)
+	// UTF-8 fonts (registered above) pass strings straight through; no cp1252
+	// translation is needed. Callers using a different font can override this.
+	doc.Options.UnicodeTranslateFunc = func(s string) string { return s }
 
 	doc.ac = accounting.Accounting{
 		Symbol:    doc.Options.CurrencySymbol,
@@ -199,8 +202,7 @@ func (d *Document) fakePdfDoc() *Document {
 	optsCopy := *d.Options
 	fakeDoc, err := New(d.Type, &optsCopy)
 	if err != nil {
-		// Should never panic, since we already called
-		// `New()` with the same args.
+		// Should never panic, since we already called New() with the same args.
 		panic(err)
 	}
 

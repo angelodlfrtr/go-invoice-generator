@@ -2,16 +2,16 @@ package facturx
 
 import (
 	"bytes"
+	"fmt"
 	"text/template"
+
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
-// xmpTemplate contains the Factur-X XMP metadata block. The xpacket begin
-// attribute must hold the UTF-8 BOM (U+FEFF), which cannot be a literal in a
-// Go source file, so it is injected via string concatenation.
-var xmpRaw = "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n" + `
-<x:xmpmeta xmlns:x="adobe:ns:meta/">
-  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-
+// fxXMPBlocksRaw are the three rdf:Description blocks injected into the XMP
+// packet. They must appear before </rdf:RDF>.
+var fxXMPBlocksRaw = `
     <rdf:Description rdf:about=""
         xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
       <pdfaid:part>3</pdfaid:part>
@@ -68,18 +68,15 @@ var xmpRaw = "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>
       <fx:Version>1.0</fx:Version>
       <fx:ConformanceLevel>{{.Profile}}</fx:ConformanceLevel>
     </rdf:Description>
-
-  </rdf:RDF>
-</x:xmpmeta>
-<?xpacket end="w"?>`
+`
 
 type xmpData struct {
 	Profile string
 }
 
-// buildXMP returns the XMP metadata bytes for the given Factur-X profile.
-func buildXMP(profile Profile) ([]byte, error) {
-	tmpl, err := template.New("xmp").Parse(xmpRaw)
+// buildFXXMPBlocks returns the rendered Factur-X rdf:Description blocks.
+func buildFXXMPBlocks(profile Profile) ([]byte, error) {
+	tmpl, err := template.New("xmp").Parse(fxXMPBlocksRaw)
 	if err != nil {
 		return nil, err
 	}
@@ -88,4 +85,91 @@ func buildXMP(profile Profile) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// buildFullXMP wraps fxBlocks in a minimal well-formed XMP packet.
+// The BOM (U+FEFF) in the xpacket begin attribute is injected via string
+// concatenation because a literal BOM in a Go source file causes a compile error.
+func buildFullXMP(fxBlocks []byte) []byte {
+	var b bytes.Buffer
+	b.WriteString("<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n")
+	b.WriteString("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n")
+	b.WriteString("  <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n")
+	b.Write(fxBlocks)
+	b.WriteString("  </rdf:RDF>\n")
+	b.WriteString("</x:xmpmeta>\n")
+	b.WriteString("<?xpacket end=\"w\"?>")
+	return b.Bytes()
+}
+
+// ensureXMPInContext ensures the PDF catalog has a /Metadata stream that carries
+// the required Factur-X XMP declarations. If no metadata stream exists (fpdf does
+// not generate one), a new uncompressed stream is created and wired into the
+// catalog. If one already exists, the Factur-X blocks are merged in before
+// </rdf:RDF>.
+//
+// PDF/A-3 requires the metadata stream to be uncompressed (clause 6.6.2.1) and
+// to carry /Type /Metadata and /Subtype /XML.
+func ensureXMPInContext(ctx *model.Context, profile Profile) error {
+	fxBlocks, err := buildFXXMPBlocks(profile)
+	if err != nil {
+		return err
+	}
+
+	catDict, err := ctx.Catalog()
+	if err != nil {
+		return fmt.Errorf("catalog: %w", err)
+	}
+
+	metaRef, hasExisting := catDict["Metadata"].(types.IndirectRef)
+	if hasExisting {
+		entry, found := ctx.FindTableEntryForIndRef(&metaRef)
+		if found && entry != nil {
+			if sd, ok := entry.Object.(types.StreamDict); ok {
+				if err := sd.Decode(); err == nil {
+					const rdfClose = "</rdf:RDF>"
+					if idx := bytes.LastIndex(sd.Content, []byte(rdfClose)); idx >= 0 {
+						var merged bytes.Buffer
+						merged.Write(sd.Content[:idx])
+						merged.Write(fxBlocks)
+						merged.Write(sd.Content[idx:])
+						sd.Content = merged.Bytes()
+					}
+				}
+				setMetadataStreamMeta(&sd)
+				if err := sd.Encode(); err != nil {
+					return fmt.Errorf("encode XMP stream: %w", err)
+				}
+				entry.Object = sd
+				return nil
+			}
+		}
+	}
+
+	// No metadata stream present: create one from scratch.
+	sd := types.StreamDict{
+		Dict:    types.NewDict(),
+		Content: buildFullXMP(fxBlocks),
+	}
+	setMetadataStreamMeta(&sd)
+	if err := sd.Encode(); err != nil {
+		return fmt.Errorf("encode new XMP stream: %w", err)
+	}
+	ir, err := ctx.IndRefForNewObject(sd)
+	if err != nil {
+		return fmt.Errorf("xmp indref: %w", err)
+	}
+	catDict["Metadata"] = *ir
+	return nil
+}
+
+// setMetadataStreamMeta stamps the stream dict with the mandatory PDF/A-3
+// metadata entries and removes any compression filter (clause 6.6.2.1 forbids
+// filtering the document metadata stream).
+func setMetadataStreamMeta(sd *types.StreamDict) {
+	sd.InsertName("Type", "Metadata")
+	sd.InsertName("Subtype", "XML")
+	sd.FilterPipeline = nil
+	sd.Delete("Filter")
+	sd.Delete("DecodeParms")
 }
