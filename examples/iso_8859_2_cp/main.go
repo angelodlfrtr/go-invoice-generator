@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator"
+	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 	"codeberg.org/go-pdf/fpdf"
 )
 

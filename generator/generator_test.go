@@ -91,11 +91,11 @@ func TestNewWithNamedTaxes(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	if err := os.MkdirAll("out", 0o755); err != nil {
+	if err := os.MkdirAll("../out", 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
-	if err := pdf.OutputFileAndClose("out/invoice_named_taxes.pdf"); err != nil {
+	if err := pdf.OutputFileAndClose("../out/invoice_named_taxes.pdf"); err != nil {
 		t.Fatalf("OutputFileAndClose: %v", err)
 	}
 }
@@ -143,7 +143,7 @@ func TestNew(t *testing.T) {
 	doc.SetDate("02/03/2021")
 	doc.SetPaymentTerm("02/04/2021")
 
-	logoBytes, _ := os.ReadFile("./example_logo.png")
+	logoBytes, _ := os.ReadFile("../support/example_logo.png")
 
 	doc.SetCompany(&Contact{
 		Name: "Test Company",
@@ -240,11 +240,11 @@ func TestNew(t *testing.T) {
 		t.Errorf("%v", err.Error())
 	}
 
-	if err := os.MkdirAll("out", 0o755); err != nil {
+	if err := os.MkdirAll("../out", 0o755); err != nil {
 		t.Errorf("%v", err.Error())
 	}
 
-	err = pdf.OutputFileAndClose("out/invoice.pdf")
+	err = pdf.OutputFileAndClose("../out/invoice.pdf")
 	if err != nil {
 		t.Errorf("%v", err.Error())
 	}

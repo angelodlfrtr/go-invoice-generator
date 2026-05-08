@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator"
+	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 )
 
 func buildTestDoc(t *testing.T) *generator.Document {

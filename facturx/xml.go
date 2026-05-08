@@ -8,7 +8,7 @@ import (
 	"text/template"
 	"time"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator"
+	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 	"github.com/shopspring/decimal"
 )
 

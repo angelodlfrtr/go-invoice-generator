@@ -92,7 +92,7 @@ func main() {
 
 ## Example output
 
-![DeliveryNoteExample](example.png)
+![DeliveryNoteExample](support/example.png)
 
 ---
 

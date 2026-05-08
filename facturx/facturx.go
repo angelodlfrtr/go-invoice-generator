@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator"
+	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 	pdfcpuapi "github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
