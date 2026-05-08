@@ -373,6 +373,80 @@ if err := pdf.Output(&buf); err != nil {
 
 ---
 
+## Factur-X — WIP / Experimental
+
+The `facturx` subpackage can embed a [Factur-X](https://fnfe-mpe.org/factur-x/) (also known as ZUGFeRD 2.x) compliant CII XML into the PDF produced by `Build()`.
+
+```sh
+go get github.com/angelodlfrtr/go-invoice-generator/facturx
+```
+
+```go
+import (
+    "bytes"
+
+    generator "github.com/angelodlfrtr/go-invoice-generator"
+    "github.com/angelodlfrtr/go-invoice-generator/facturx"
+)
+
+// 1. Build the PDF as usual.
+pdf, err := doc.Build()
+if err != nil {
+    log.Fatal(err)
+}
+
+var buf bytes.Buffer
+if err := pdf.Output(&buf); err != nil {
+    log.Fatal(err)
+}
+
+// 2. Attach the Factur-X XML and patch XMP metadata.
+result, err := facturx.Attach(buf.Bytes(), doc, facturx.Options{
+    Profile:     facturx.ProfileMinimum,
+    SellerTaxID: "FR12345678901",
+    CurrencyCode: "EUR",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// result contains the PDF with the embedded factur-x.xml attachment.
+os.WriteFile("invoice_facturx.pdf", result, 0644)
+```
+
+### Profiles
+
+| Constant                  | Factur-X profile |
+| ------------------------- | ---------------- |
+| `facturx.ProfileMinimum`  | MINIMUM          |
+| `facturx.ProfileBasicWL`  | BASIC-WL         |
+| `facturx.ProfileBasic`    | BASIC            |
+| `facturx.ProfileEN16931`  | EN 16931         |
+| `facturx.ProfileExtended` | EXTENDED         |
+
+Line items are included in the XML for `ProfileBasic` and above; `ProfileMinimum` and `ProfileBasicWL` omit them per the specification.
+
+### Options
+
+| Field             | Type    | Description                                                                |
+| ----------------- | ------- | -------------------------------------------------------------------------- |
+| `Profile`         | Profile | Conformance level (default: `ProfileMinimum`)                              |
+| `CurrencyCode`    | string  | ISO 4217 code (default: `"EUR"`)                                           |
+| `SellerTaxID`     | string  | Seller VAT registration number (e.g. `"FR12345678901"`)                    |
+| `BuyerReference`  | string  | Buyer's internal reference (e.g. a purchase order number)                  |
+| `PaymentDueDate`  | string  | Payment due date in `"YYYYMMDD"` format                                    |
+| `PaymentIBAN`     | string  | Seller IBAN for bank transfer                                              |
+| `PaymentBIC`      | string  | Seller BIC/SWIFT code                                                      |
+| `TaxCategoryCode` | string  | Default VAT category code — `"S"` standard, `"E"` exempt, `"Z"` zero-rated |
+| `TypeCode`        | string  | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)        |
+
+### Limitations
+
+- **PDF/A-3 compliance**: full conformance requires the base PDF to be generated in PDF/A mode (embedded ICC colour profiles, etc.), which fpdf does not support out of the box. The embedded XML and XMP metadata are correct, but a strict PDF/A validator may flag the base PDF.
+- The XMP metadata patch applies only when the base PDF already contains an XMP packet (fpdf produces one by default).
+
+---
+
 ## License
 
 Distributed under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0).
