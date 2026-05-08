@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 
 	generator "github.com/angelodlfrtr/go-invoice-generator"
@@ -26,13 +25,13 @@ func main() {
 		pdf := doc.Pdf()
 
 		// Bold
-		jsonBytes, _ := ioutil.ReadFile("./Roboto-Bold.json")
-		zBytes, _ := ioutil.ReadFile("./Roboto-Bold.z")
+		jsonBytes, _ := os.ReadFile("./Roboto-Bold.json")
+		zBytes, _ := os.ReadFile("./Roboto-Bold.z")
 		pdf.AddFontFromBytes("Roboto", "B", jsonBytes, zBytes)
 
 		// Regular
-		jsonBytes, _ = ioutil.ReadFile("././Roboto-Regular.json")
-		zBytes, _ = ioutil.ReadFile("./Roboto-Regular.z")
+		jsonBytes, _ = os.ReadFile("././Roboto-Regular.json")
+		zBytes, _ = os.ReadFile("./Roboto-Regular.z")
 		pdf.AddFontFromBytes("Roboto", "", jsonBytes, zBytes)
 	}()
 
