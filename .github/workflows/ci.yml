@@ -52,3 +52,6 @@ jobs:
 
       - name: Verapdf check PDF/A-3
         run: nix develop --command make verapdf-check-3b
+
+      - name: Mustang Project FacturX check
+        run: nix develop --command make mustang-check-facturx

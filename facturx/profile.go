@@ -16,9 +16,9 @@ func (p Profile) guidelineID() string {
 	case ProfileBasicWL:
 		return "urn:factur-x.eu:1p0:basicwl"
 	case ProfileBasic:
-		return "urn:factur-x.eu:1p0:basic"
+		return "urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic"
 	case ProfileEN16931:
-		return "urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:en16931"
+		return "urn:cen.eu:en16931:2017"
 	case ProfileExtended:
 		return "urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended"
 	default:

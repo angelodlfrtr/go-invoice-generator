@@ -2,7 +2,10 @@ package facturx
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
@@ -63,8 +66,8 @@ func buildTestDoc(t *testing.T) *generator.Document {
 	return doc
 }
 
-func TestAttach(t *testing.T) {
-	doc := buildTestDoc(t)
+func buildPDF(t *testing.T, doc *generator.Document) []byte {
+	t.Helper()
 
 	pdf, err := doc.Build()
 	if err != nil {
@@ -76,13 +79,21 @@ func TestAttach(t *testing.T) {
 		t.Fatalf("pdf.Output: %v", err)
 	}
 
-	result, err := Attach(buf.Bytes(), doc, Options{
-		Profile:         ProfileMinimum,
-		SellerTaxID:     "FR12345678901",
-		CurrencyCode:    "EUR",
-		PaymentDueDate:  "20240201",
-		TaxCategoryCode: "S",
-		ShowIcon:        true,
+	return buf.Bytes()
+}
+
+func TestAttach(t *testing.T) {
+	doc := buildTestDoc(t)
+
+	result, err := Attach(buildPDF(t, doc), doc, Options{
+		Profile:          ProfileMinimum,
+		SellerTaxID:      "FR12345678901",
+		SellerCountryCode: "FR",
+		BuyerCountryCode: "US",
+		CurrencyCode:     "EUR",
+		PaymentDueDate:   "20240201",
+		TaxCategoryCode:  "S",
+		ShowIcon:         true,
 	})
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
@@ -110,24 +121,22 @@ func TestAttachProfiles(t *testing.T) {
 		ProfileExtended,
 	}
 
+	if err := os.MkdirAll("../out", 0o755); err != nil {
+		t.Fatalf("mkdir out: %v", err)
+	}
+
 	for _, profile := range profiles {
 		t.Run(string(profile), func(t *testing.T) {
 			doc := buildTestDoc(t)
 
-			pdf, err := doc.Build()
-			if err != nil {
-				t.Fatalf("doc.Build: %v", err)
-			}
-
-			var buf bytes.Buffer
-			if err := pdf.Output(&buf); err != nil {
-				t.Fatalf("pdf.Output: %v", err)
-			}
-
-			result, err := Attach(buf.Bytes(), doc, Options{
-				Profile:      profile,
-				SellerTaxID:  "FR12345678901",
-				CurrencyCode: "EUR",
+			result, err := Attach(buildPDF(t, doc), doc, Options{
+				Profile:          profile,
+				SellerTaxID:      "FR12345678901",
+				SellerCountryCode: "FR",
+				BuyerCountryCode: "US",
+				CurrencyCode:     "EUR",
+				PaymentDueDate:   "20240201",
+				TaxCategoryCode:  "S",
 			})
 			if err != nil {
 				t.Fatalf("Attach(%s): %v", profile, err)
@@ -135,6 +144,65 @@ func TestAttachProfiles(t *testing.T) {
 
 			if len(result) == 0 {
 				t.Fatalf("Attach(%s) returned empty result", profile)
+			}
+
+			filename := fmt.Sprintf("../out/facturx_%s.pdf", strings.ReplaceAll(string(profile), " ", "_"))
+			if err := os.WriteFile(filename, result, 0o644); err != nil {
+				t.Fatalf("write %s: %v", filename, err)
+			}
+		})
+	}
+}
+
+func TestMustangValidation(t *testing.T) {
+	if _, err := exec.LookPath("mustang-cli"); err != nil {
+		t.Skip("mustang-cli not in PATH")
+	}
+
+	profiles := []Profile{
+		ProfileMinimum,
+		ProfileBasicWL,
+		ProfileBasic,
+		ProfileEN16931,
+		ProfileExtended,
+	}
+
+	if err := os.MkdirAll("../out", 0o755); err != nil {
+		t.Fatalf("mkdir out: %v", err)
+	}
+
+	// Generate all profile PDFs first.
+	for _, profile := range profiles {
+		doc := buildTestDoc(t)
+		result, err := Attach(buildPDF(t, doc), doc, Options{
+			Profile:          profile,
+			SellerTaxID:      "FR12345678901",
+			SellerCountryCode: "FR",
+			BuyerCountryCode: "US",
+			CurrencyCode:     "EUR",
+			PaymentDueDate:   "20240201",
+			TaxCategoryCode:  "S",
+		})
+		if err != nil {
+			t.Fatalf("Attach(%s): %v", profile, err)
+		}
+		filename := fmt.Sprintf("../out/facturx_%s.pdf", strings.ReplaceAll(string(profile), " ", "_"))
+		if err := os.WriteFile(filename, result, 0o644); err != nil {
+			t.Fatalf("write %s: %v", filename, err)
+		}
+	}
+
+	// Validate each with mustang-cli.
+	for _, profile := range profiles {
+		profile := profile
+		t.Run(string(profile), func(t *testing.T) {
+			filename := fmt.Sprintf("../out/facturx_%s.pdf", strings.ReplaceAll(string(profile), " ", "_"))
+			out, err := exec.Command("mustang-cli", "--action", "validate", "--source", filename).CombinedOutput()
+			if err != nil {
+				t.Fatalf("mustang-cli failed: %v\n%s", err, out)
+			}
+			if !strings.Contains(string(out), `status="valid"`) {
+				t.Fatalf("profile %s not valid:\n%s", profile, out)
 			}
 		})
 	}
@@ -148,9 +216,11 @@ func TestBuildXML(t *testing.T) {
 	}
 
 	xmlBytes, err := BuildXML(doc, Options{
-		Profile:      ProfileEN16931,
-		SellerTaxID:  "FR12345678901",
-		CurrencyCode: "EUR",
+		Profile:          ProfileEN16931,
+		SellerTaxID:      "FR12345678901",
+		SellerCountryCode: "FR",
+		BuyerCountryCode: "US",
+		CurrencyCode:     "EUR",
 	})
 	if err != nil {
 		t.Fatalf("BuildXML: %v", err)
