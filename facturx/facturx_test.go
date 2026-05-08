@@ -86,14 +86,14 @@ func TestAttach(t *testing.T) {
 	doc := buildTestDoc(t)
 
 	result, err := Attach(buildPDF(t, doc), doc, Options{
-		Profile:          ProfileMinimum,
-		SellerTaxID:      "FR12345678901",
+		Profile:           ProfileMinimum,
+		SellerTaxID:       "FR12345678901",
 		SellerCountryCode: "FR",
-		BuyerCountryCode: "US",
-		CurrencyCode:     "EUR",
-		PaymentDueDate:   "20240201",
-		TaxCategoryCode:  "S",
-		ShowIcon:         true,
+		BuyerCountryCode:  "US",
+		CurrencyCode:      "EUR",
+		PaymentDueDate:    "20240201",
+		TaxCategoryCode:   "S",
+		ShowIcon:          true,
 	})
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
@@ -103,7 +103,7 @@ func TestAttach(t *testing.T) {
 		t.Fatal("Attach returned empty result")
 	}
 
-	if err := os.MkdirAll("../out", 0o755); err != nil {
+	if err := os.MkdirAll("../out", 0o750); err != nil {
 		t.Fatalf("mkdir out: %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestAttachProfiles(t *testing.T) {
 		ProfileExtended,
 	}
 
-	if err := os.MkdirAll("../out", 0o755); err != nil {
+	if err := os.MkdirAll("../out", 0o750); err != nil {
 		t.Fatalf("mkdir out: %v", err)
 	}
 
@@ -130,13 +130,13 @@ func TestAttachProfiles(t *testing.T) {
 			doc := buildTestDoc(t)
 
 			result, err := Attach(buildPDF(t, doc), doc, Options{
-				Profile:          profile,
-				SellerTaxID:      "FR12345678901",
+				Profile:           profile,
+				SellerTaxID:       "FR12345678901",
 				SellerCountryCode: "FR",
-				BuyerCountryCode: "US",
-				CurrencyCode:     "EUR",
-				PaymentDueDate:   "20240201",
-				TaxCategoryCode:  "S",
+				BuyerCountryCode:  "US",
+				CurrencyCode:      "EUR",
+				PaymentDueDate:    "20240201",
+				TaxCategoryCode:   "S",
 			})
 			if err != nil {
 				t.Fatalf("Attach(%s): %v", profile, err)
@@ -167,7 +167,7 @@ func TestMustangValidation(t *testing.T) {
 		ProfileExtended,
 	}
 
-	if err := os.MkdirAll("../out", 0o755); err != nil {
+	if err := os.MkdirAll("../out", 0o750); err != nil {
 		t.Fatalf("mkdir out: %v", err)
 	}
 
@@ -175,13 +175,13 @@ func TestMustangValidation(t *testing.T) {
 	for _, profile := range profiles {
 		doc := buildTestDoc(t)
 		result, err := Attach(buildPDF(t, doc), doc, Options{
-			Profile:          profile,
-			SellerTaxID:      "FR12345678901",
+			Profile:           profile,
+			SellerTaxID:       "FR12345678901",
 			SellerCountryCode: "FR",
-			BuyerCountryCode: "US",
-			CurrencyCode:     "EUR",
-			PaymentDueDate:   "20240201",
-			TaxCategoryCode:  "S",
+			BuyerCountryCode:  "US",
+			CurrencyCode:      "EUR",
+			PaymentDueDate:    "20240201",
+			TaxCategoryCode:   "S",
 		})
 		if err != nil {
 			t.Fatalf("Attach(%s): %v", profile, err)
@@ -216,11 +216,11 @@ func TestBuildXML(t *testing.T) {
 	}
 
 	xmlBytes, err := BuildXML(doc, Options{
-		Profile:          ProfileEN16931,
-		SellerTaxID:      "FR12345678901",
+		Profile:           ProfileEN16931,
+		SellerTaxID:       "FR12345678901",
 		SellerCountryCode: "FR",
-		BuyerCountryCode: "US",
-		CurrencyCode:     "EUR",
+		BuyerCountryCode:  "US",
+		CurrencyCode:      "EUR",
 	})
 	if err != nil {
 		t.Fatalf("BuildXML: %v", err)

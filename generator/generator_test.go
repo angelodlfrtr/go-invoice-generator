@@ -91,7 +91,7 @@ func TestNewWithNamedTaxes(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	if err := os.MkdirAll("../out", 0o755); err != nil {
+	if err := os.MkdirAll("../out", 0o750); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
@@ -240,7 +240,7 @@ func TestNew(t *testing.T) {
 		t.Errorf("%v", err.Error())
 	}
 
-	if err := os.MkdirAll("../out", 0o755); err != nil {
+	if err := os.MkdirAll("../out", 0o750); err != nil {
 		t.Errorf("%v", err.Error())
 	}
 

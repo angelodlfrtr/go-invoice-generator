@@ -11,6 +11,7 @@ built on top of [go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf).
 
 - Three document types: Invoice, Quotation, Delivery Note
 - Per-item tax and discount (percentage or fixed amount)
+- Named taxes with per-name breakdown in the totals block
 - Document-level discount applied after item discounts
 - Default tax applied automatically to items that have none
 - Programmatic access to all totals (no need to build the PDF first)
@@ -19,12 +20,27 @@ built on top of [go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf).
 - Fully customisable labels, colours, and currency formatting
 - Output to file or `[]byte`
 - Roboto font embedded by default — no external font files required
-- Optional [Factur-X](#factur-x--wip--experimental) subpackage produces **PDF/A-3B** compliant e-invoices (verified with veraPDF in CI)
+- WIP / Experimental: Optional [Factur-X](#factur-x--wip--experimental) subpackage produces **PDF/A-3B** compliant e-invoices for all five profiles, verified with veraPDF and mustangproject
+
+---
+
+## v0.7.0 — Breaking Changes
+
+The generator code has moved to the `generator` subpackage. Update your imports:
+
+```diff
+-import generator "github.com/angelodlfrtr/go-invoice-generator"
++import generator "github.com/angelodlfrtr/go-invoice-generator/generator"
+```
+
+The module path (`github.com/angelodlfrtr/go-invoice-generator`) is unchanged.
+
+---
 
 ## Installation
 
 ```sh
-go get github.com/angelodlfrtr/go-invoice-generator
+go get github.com/angelodlfrtr/go-invoice-generator/generator
 ```
 
 ## Quick start
@@ -36,7 +52,7 @@ import (
 	"log"
 	"os"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator"
+	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 )
 
 func main() {
@@ -137,10 +153,11 @@ doc, err := generator.New(generator.Invoice, &generator.Options{
 	TextItemsTaxTitle:      "Tax",
 	TextItemsDiscountTitle: "Discount",
 	TextItemsTotalTTCTitle: "Total",
-	TextTotalTotal:         "TOTAL",
-	TextTotalDiscounted:    "TOTAL DISCOUNTED",
-	TextTotalTax:           "TAX",
-	TextTotalWithTax:       "TOTAL WITH TAX",
+	TextTotalTotal:         "Total",
+	TextTotalDiscounted:    "Total discounted",
+	TextTotalTax:           "Tax",
+	TextTotalTaxOther:      "Other",  // label for unnamed taxes in breakdown (default: "Other")
+	TextTotalWithTax:       "Total with tax",
 
 	// Colours (RGB)
 	BaseTextColor: []int{35, 35, 35},
@@ -218,15 +235,26 @@ the library uses [shopspring/decimal](https://github.com/shopspring/decimal) int
 
 ### Tax
 
-A tax is either a **percentage** or a **fixed amount** — not both.
+A tax is either a **percentage** or a **fixed amount** — not both. An optional `Name`
+groups taxes in the totals breakdown.
 
 ```go
-// 20% tax computed on the discounted item subtotal
-Tax: &generator.Tax{Percent: "20"}
+// 20% VAT
+Tax: &generator.Tax{Percent: "20", Name: "VAT 20%"}
 
-// Fixed €89 tax regardless of quantity
-Tax: &generator.Tax{Amount: "89"}
+// Reduced 5.5% VAT
+Tax: &generator.Tax{Percent: "5.5", Name: "VAT 5.5%"}
+
+// Fixed €89 eco-tax regardless of quantity
+Tax: &generator.Tax{Amount: "89", Name: "Eco tax"}
+
+// Unnamed — grouped under "Other" in the breakdown
+Tax: &generator.Tax{Percent: "10"}
 ```
+
+When two or more distinct tax names are present the totals block shows the overall
+tax amount (same as before) followed by a smaller per-name breakdown. Taxes without a
+name are grouped under the label set by `Options.TextTotalTaxOther` (default: `"Other"`).
 
 ### Discount
 
@@ -375,7 +403,7 @@ if err := pdf.Output(&buf); err != nil {
 
 ## Factur-X — WIP / Experimental
 
-The `facturx` subpackage embeds a [Factur-X](https://fnfe-mpe.org/factur-x/) (also known as ZUGFeRD 2.x) compliant CII XML into the PDF produced by `Build()`. In addition to the XML attachment, `Attach` automatically:
+The `facturx` subpackage embeds a [Factur-X](https://fnfe-mpe.org/factur-x/) (also known as ZUGFeRD 2.x) compliant CII XML into the PDF produced by `Build()`. All five conformance levels are supported and validated with mustang-cli and veraPDF (PDF/A-3B). In addition to the XML attachment, `Attach` automatically:
 
 - Sets `/AFRelationship /Alternative` on the embedded file, as required by PDF/A-3.
 - Inserts an sRGB ICC OutputIntent into the PDF catalog (pure Go, no external dependencies).
@@ -389,7 +417,7 @@ go get github.com/angelodlfrtr/go-invoice-generator/facturx
 import (
     "bytes"
 
-    generator "github.com/angelodlfrtr/go-invoice-generator"
+    generator "github.com/angelodlfrtr/go-invoice-generator/generator"
     "github.com/angelodlfrtr/go-invoice-generator/facturx"
 )
 
@@ -406,9 +434,14 @@ if err := pdf.Output(&buf); err != nil {
 
 // 2. Attach the Factur-X XML and bring the document into PDF/A-3b conformance.
 result, err := facturx.Attach(buf.Bytes(), doc, facturx.Options{
-    Profile:      facturx.ProfileMinimum,
-    SellerTaxID:  "FR12345678901",
-    CurrencyCode: "EUR",
+    Profile:           facturx.ProfileEN16931,
+    SellerTaxID:       "FR12345678901",
+    SellerCountryCode: "FR",
+    BuyerCountryCode:  "US",
+    CurrencyCode:      "EUR",
+    PaymentDueDate:    "20240201",
+    PaymentIBAN:       "FR7630006000011234567890189",
+    PaymentBIC:        "BNPAFRPP",
 })
 if err != nil {
     log.Fatal(err)
@@ -420,29 +453,33 @@ os.WriteFile("invoice_facturx.pdf", result, 0644)
 
 ### Profiles
 
-| Constant                  | Factur-X profile |
-| ------------------------- | ---------------- |
-| `facturx.ProfileMinimum`  | MINIMUM          |
-| `facturx.ProfileBasicWL`  | BASIC-WL         |
-| `facturx.ProfileBasic`    | BASIC            |
-| `facturx.ProfileEN16931`  | EN 16931         |
-| `facturx.ProfileExtended` | EXTENDED         |
-
-Line items are included in the XML for `ProfileBasic` and above; `ProfileMinimum` and `ProfileBasicWL` omit them per the specification.
+| Constant                  | Factur-X profile | Line items in XML |
+| ------------------------- | ---------------- | ----------------- |
+| `facturx.ProfileMinimum`  | MINIMUM          | No                |
+| `facturx.ProfileBasicWL`  | BASIC-WL         | No                |
+| `facturx.ProfileBasic`    | BASIC            | Yes               |
+| `facturx.ProfileEN16931`  | EN 16931         | Yes               |
+| `facturx.ProfileExtended` | EXTENDED         | Yes               |
 
 ### Options
 
-| Field             | Type    | Description                                                                |
-| ----------------- | ------- | -------------------------------------------------------------------------- |
-| `Profile`         | Profile | Conformance level (default: `ProfileMinimum`)                              |
-| `CurrencyCode`    | string  | ISO 4217 code (default: `"EUR"`)                                           |
-| `SellerTaxID`     | string  | Seller VAT registration number (e.g. `"FR12345678901"`)                    |
-| `BuyerReference`  | string  | Buyer's internal reference (e.g. a purchase order number)                  |
-| `PaymentDueDate`  | string  | Payment due date in `"YYYYMMDD"` format                                    |
-| `PaymentIBAN`     | string  | Seller IBAN for bank transfer                                              |
-| `PaymentBIC`      | string  | Seller BIC/SWIFT code                                                      |
-| `TaxCategoryCode` | string  | Default VAT category code — `"S"` standard, `"E"` exempt, `"Z"` zero-rated |
-| `TypeCode`        | string  | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)        |
+| Field                 | Type    | Description                                                                         |
+| --------------------- | ------- | ----------------------------------------------------------------------------------- |
+| `Profile`             | Profile | Conformance level (default: `ProfileMinimum`)                                       |
+| `CurrencyCode`        | string  | ISO 4217 code (default: `"EUR"`)                                                    |
+| `SellerTaxID`         | string  | Seller VAT registration number (e.g. `"FR12345678901"`)                             |
+| `SellerCountryCode`   | string  | ISO 3166-1 alpha-2 seller country code (e.g. `"FR"`); falls back to address country |
+| `BuyerCountryCode`    | string  | ISO 3166-1 alpha-2 buyer country code (e.g. `"US"`); falls back to address country  |
+| `BuyerReference`      | string  | Buyer's internal reference (e.g. a purchase order number)                           |
+| `BuyerTaxID`          | string  | Buyer VAT registration number (rendered for BASIC-WL and above)                     |
+| `PaymentDueDate`      | string  | Payment due date in `"YYYYMMDD"` format                                             |
+| `PaymentIBAN`         | string  | Seller IBAN for bank transfer                                                       |
+| `PaymentBIC`          | string  | Seller BIC/SWIFT code                                                               |
+| `PaymentMeansCode`    | string  | UN/ECE 4461 payment means code (default: `"58"` when IBAN is set)                   |
+| `TaxCategoryCode`     | string  | Default VAT category code — `"S"` standard, `"E"` exempt, `"Z"` zero-rated          |
+| `TypeCode`            | string  | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)                 |
+| `ItemDefaultUnitCode` | string  | UN/ECE Rec 20 unit code for all line items (default: `"C62"` piece/unit)            |
+| `ShowIcon`            | bool    | Place the Factur-X profile icon in the bottom-right corner of the first page        |
 
 ---
 

@@ -25,7 +25,7 @@ jobs:
           restore-prefixes-first-match: nix-${{ runner.os }}-
           # collect garbage until Nix store size (in bytes) is at most this number
           # before trying to save a new cache
-          gc-max-store-size-linux: 1G
+          gc-max-store-size-linux: 4G
           # do purge caches
           purge: true
           # purge all versions of the cache

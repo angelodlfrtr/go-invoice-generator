@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 	"codeberg.org/go-pdf/fpdf"
+	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 )
 
 func main() {
@@ -70,7 +70,7 @@ func main() {
 		panic(err)
 	}
 
-	if err := os.MkdirAll("out", 0o755); err != nil {
+	if err := os.MkdirAll("out", 0o750); err != nil {
 		panic(err)
 	}
 
