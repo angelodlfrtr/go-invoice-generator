@@ -140,7 +140,9 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 			</ram:SpecifiedTradePaymentTerms>
 			{{- end}}
 			<ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+				{{- if .HasLineTotalAmount}}
 				<ram:LineTotalAmount>{{.LineTotalAmount}}</ram:LineTotalAmount>
+				{{- end}}
 				<ram:TaxBasisTotalAmount>{{.TaxBasisTotalAmount}}</ram:TaxBasisTotalAmount>
 				<ram:TaxTotalAmount currencyID="{{.CurrencyCode}}">{{.TaxTotalAmount}}</ram:TaxTotalAmount>
 				<ram:GrandTotalAmount>{{.GrandTotalAmount}}</ram:GrandTotalAmount>
@@ -192,6 +194,7 @@ type ciiData struct {
 	PaymentDueDate      string
 	TaxCategoryCode     string
 	TaxBreakdown        []ciiTaxLine
+	HasLineTotalAmount  bool
 	LineTotalAmount     string
 	TaxBasisTotalAmount string
 	TaxTotalAmount      string
@@ -255,23 +258,25 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	}
 
 	if doc.Company.Address != nil {
-		d.SellerAddress = &ciiAddress{
-			Address:    doc.Company.Address.Address,
-			Address2:   doc.Company.Address.Address2,
-			PostalCode: doc.Company.Address.PostalCode,
-			City:       doc.Company.Address.City,
-			Country:    doc.Company.Address.Country,
+		a := &ciiAddress{Country: doc.Company.Address.Country}
+		if profile != ProfileMinimum {
+			a.Address = doc.Company.Address.Address
+			a.Address2 = doc.Company.Address.Address2
+			a.PostalCode = doc.Company.Address.PostalCode
+			a.City = doc.Company.Address.City
 		}
+		d.SellerAddress = a
 	}
 
 	if doc.Customer.Address != nil {
-		d.BuyerAddress = &ciiAddress{
-			Address:    doc.Customer.Address.Address,
-			Address2:   doc.Customer.Address.Address2,
-			PostalCode: doc.Customer.Address.PostalCode,
-			City:       doc.Customer.Address.City,
-			Country:    doc.Customer.Address.Country,
+		a := &ciiAddress{Country: doc.Customer.Address.Country}
+		if profile != ProfileMinimum {
+			a.Address = doc.Customer.Address.Address
+			a.Address2 = doc.Customer.Address.Address2
+			a.PostalCode = doc.Customer.Address.PostalCode
+			a.City = doc.Customer.Address.City
 		}
+		d.BuyerAddress = a
 	}
 
 	// Monetary totals
@@ -285,8 +290,19 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	d.TaxTotalAmount = taxTotal.StringFixed(2)
 	d.GrandTotalAmount = grandTotal.StringFixed(2)
 
-	// Tax breakdown grouped by rate
-	d.TaxBreakdown = buildTaxBreakdown(doc, opts.taxCategoryCode())
+	// Tax breakdown grouped by rate — not included in MINIMUM profile.
+	if profile != ProfileMinimum {
+		d.TaxBreakdown = buildTaxBreakdown(doc, opts.taxCategoryCode())
+	}
+
+	// LineTotalAmount and payment terms are not part of the MINIMUM profile schema.
+	if profile != ProfileMinimum {
+		d.HasLineTotalAmount = true
+	} else {
+		d.PaymentDueDate = ""
+		d.PaymentIBAN = ""
+		d.PaymentBIC = ""
+	}
 
 	// Line items — only included for profiles that require them (BASIC and above).
 	if profile != ProfileMinimum && profile != ProfileBasicWL {

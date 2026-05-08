@@ -32,6 +32,10 @@ type Options struct {
 	// TypeCode is the UN/CEFACT document type code. Defaults to "380" (invoice).
 	// Other common values: "381" (credit note), "84" (delivery note).
 	TypeCode string
+
+	// ShowIcon places the Factur-X profile icon in the bottom-right corner of
+	// the first page as a compliance mark. Defaults to false.
+	ShowIcon bool
 }
 
 func (o Options) profile() Profile {

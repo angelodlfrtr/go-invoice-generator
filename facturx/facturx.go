@@ -38,7 +38,7 @@ func Attach(pdfBytes []byte, doc *generator.Document, opts Options) ([]byte, err
 		return nil, fmt.Errorf("facturx: build XML: %w", err)
 	}
 
-	result, err := attachFX(pdfBytes, xmlBytes, opts.profile())
+	result, err := attachFX(pdfBytes, xmlBytes, opts)
 	if err != nil {
 		return nil, fmt.Errorf("facturx: %w", err)
 	}
@@ -48,7 +48,9 @@ func Attach(pdfBytes []byte, doc *generator.Document, opts Options) ([]byte, err
 
 // attachFX is the single-pass PDF manipulation pipeline: load into a pdfcpu
 // context, embed the XML with proper PDF/A-3 semantics, write once.
-func attachFX(pdfBytes, xmlBytes []byte, profile Profile) ([]byte, error) {
+func attachFX(pdfBytes, xmlBytes []byte, opts Options) ([]byte, error) {
+	profile := opts.profile()
+
 	conf := model.NewDefaultConfiguration()
 	conf.ValidationMode = model.ValidationRelaxed
 
@@ -67,6 +69,12 @@ func attachFX(pdfBytes, xmlBytes []byte, profile Profile) ([]byte, error) {
 
 	if err := ensureXMPInContext(ctx, profile); err != nil {
 		return nil, fmt.Errorf("ensure XMP: %w", err)
+	}
+
+	if opts.ShowIcon {
+		if err := stampFXIcon(ctx, profile); err != nil {
+			return nil, fmt.Errorf("stamp icon: %w", err)
+		}
 	}
 
 	var out bytes.Buffer

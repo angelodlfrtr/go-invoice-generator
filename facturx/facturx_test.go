@@ -30,7 +30,7 @@ func buildTestDoc(t *testing.T) *generator.Document {
 			Address:    "1 Rue de la Paix",
 			PostalCode: "75001",
 			City:       "Paris",
-			Country:    "France",
+			Country:    "FR",
 		},
 		AddtionnalInfo: []string{"VAT: FR12345678901"},
 	})
@@ -41,7 +41,7 @@ func buildTestDoc(t *testing.T) *generator.Document {
 			Address:    "42 Main Street",
 			PostalCode: "10001",
 			City:       "New York",
-			Country:    "USA",
+			Country:    "US",
 		},
 	})
 
@@ -82,6 +82,7 @@ func TestAttach(t *testing.T) {
 		CurrencyCode:    "EUR",
 		PaymentDueDate:  "20240201",
 		TaxCategoryCode: "S",
+		ShowIcon:        true,
 	})
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
