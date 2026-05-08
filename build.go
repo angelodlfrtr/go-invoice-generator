@@ -266,21 +266,25 @@ func (doc *Document) appendItems() {
 	doc.pdf.SetY(doc.pdf.GetY() + 8)
 	doc.pdf.SetFont(doc.Options.Font, "", 8)
 
-	for i := 0; i < len(doc.Items); i++ {
-		item := doc.Items[i]
+	for _, item := range doc.Items {
+		doc.pageTxn(func(d *Document) {
+			item.appendColTo(d)
+		}, func(d *Document) {
+			d.drawsTableTitles()
+			d.pdf.SetFont(d.Options.Font, "", 8)
+			d.pdf.SetX(10)
+			d.pdf.SetY(d.pdf.GetY() + 8)
+		})
 
-		// Append to pdf
-		item.appendColTo(doc.Options, doc)
-
-		if doc.pdf.GetY() > MaxPageHeight {
-			// Add page
-			doc.pdf.AddPage()
-			doc.drawsTableTitles()
-			doc.pdf.SetFont(doc.Options.Font, "", 8)
-		}
+		// Gray separator line at the bottom of the item row
+		doc.pdf.SetY(doc.pdf.GetY() + 3)
+		lineY := doc.pdf.GetY()
+		doc.pdf.SetDrawColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
+		doc.pdf.Line(10, lineY, 200, lineY)
+		doc.pdf.SetDrawColor(0, 0, 0)
 
 		doc.pdf.SetX(10)
-		doc.pdf.SetY(doc.pdf.GetY() + 6)
+		doc.pdf.SetY(doc.pdf.GetY() + 3)
 	}
 }
 

@@ -97,20 +97,6 @@ func (doc *Document) SetUnicodeTranslator(fn UnicodeTranslateFunc) {
 	doc.Options.UnicodeTranslateFunc = fn
 }
 
-func (doc *Document) encodeString(str string) string {
-	return doc.Options.UnicodeTranslateFunc(str)
-}
-
-func (d *Document) typeAsString() string {
-	if d.Type == Invoice {
-		return d.Options.TextTypeInvoice
-	}
-	if d.Type == Quotation {
-		return d.Options.TextTypeQuotation
-	}
-	return d.Options.TextTypeDeliveryNote
-}
-
 // SetType sets the document type
 func (d *Document) SetType(docType string) *Document {
 	d.Type = docType
@@ -193,4 +179,59 @@ func (d *Document) SetDefaultTax(tax *Tax) *Document {
 func (d *Document) SetDiscount(discount *Discount) *Document {
 	d.Discount = discount
 	return d
+}
+
+func (doc *Document) encodeString(str string) string {
+	return doc.Options.UnicodeTranslateFunc(str)
+}
+
+func (d *Document) typeAsString() string {
+	if d.Type == Invoice {
+		return d.Options.TextTypeInvoice
+	}
+	if d.Type == Quotation {
+		return d.Options.TextTypeQuotation
+	}
+	return d.Options.TextTypeDeliveryNote
+}
+
+func (d *Document) fakePdfDoc() *Document {
+	optsCopy := *d.Options
+	fakeDoc, err := New(d.Type, &optsCopy)
+	if err != nil {
+		// Should never panic, since we already called
+		// `New()` with the same args.
+		panic(err)
+	}
+
+	pageCount := d.pdf.PageCount()
+	for i := 0; i < pageCount; i++ {
+		fakeDoc.pdf.AddPage()
+	}
+	fakeDoc.pdf.SetPage(d.pdf.PageNo())
+	fakeDoc.pdf.SetXY(d.pdf.GetXY())
+
+	return fakeDoc
+}
+
+type pageTxnFn func(*Document)
+
+// pageTxn dry-runs cb on a probe document to detect page breaks, then executes
+// for real. If a page break is detected, AddPage is called on the real document
+// and onBreak (if provided) runs before the real render — use it to redraw
+// table headers or reset font/position state.
+func (d *Document) pageTxn(cb pageTxnFn, onBreak ...pageTxnFn) {
+	fdoc := d.fakePdfDoc()
+
+	currentPage := fdoc.pdf.PageNo()
+	cb(fdoc)
+
+	if fdoc.pdf.PageNo() > currentPage || fdoc.pdf.GetY() > MaxPageHeight {
+		d.pdf.AddPage()
+		if len(onBreak) > 0 && onBreak[0] != nil {
+			onBreak[0](d)
+		}
+	}
+
+	cb(d)
 }

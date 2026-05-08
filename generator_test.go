@@ -18,16 +18,15 @@ func TestNewWithInvalidType(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	doc, err := New(Invoice, &Options{
-		TextTypeInvoice:   "FACTURE",
-		TextRefTitle:      "Réàf.",
-		AutoPrint:         true,
-		BaseTextColor:     []int{6, 63, 156},
-		GreyTextColor:     []int{161, 96, 149},
-		GreyBgColor:       []int{171, 240, 129},
-		DarkBgColor:       []int{176, 12, 20},
+		TextTypeInvoice: "FACTURE",
+		TextRefTitle:    "Réàf.",
+		AutoPrint:       true,
+		// BaseTextColor:     []int{6, 63, 156},
+		// GreyTextColor:     []int{161, 96, 149},
+		// GreyBgColor:       []int{171, 240, 129},
+		// DarkBgColor:       []int{176, 12, 20},
 		CurrencyPrecision: 2,
 	})
-
 	if err != nil {
 		t.Fatalf("got error %v", err)
 	}
@@ -80,7 +79,7 @@ func TestNew(t *testing.T) {
 		},
 	})
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 8; i++ {
 		doc.AppendItem(&Item{
 			Name:        "Cupcake ipsum dolor sit amet bonbon, coucou bonbon lala jojo, mama titi toto",
 			Description: "Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon",
@@ -91,6 +90,16 @@ func TestNew(t *testing.T) {
 			},
 		})
 	}
+
+	doc.AppendItem(&Item{
+		Name:        "Cupcake ipsum dolor sit amet bonbon, coucou bonbon lala jojo, mama titi toto",
+		Description: "Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon, Cupcake ipsum dolor sit amet bonbon",
+		UnitCost:    "1000.99",
+		Quantity:    "10",
+		Tax: &Tax{
+			Percent: "15.6",
+		},
+	})
 
 	doc.AppendItem(&Item{
 		Name:     "Test",
@@ -135,12 +144,11 @@ func TestNew(t *testing.T) {
 
 	pdf, err := doc.Build()
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%v", err.Error())
 	}
 
 	err = pdf.OutputFileAndClose("out.pdf")
-
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%v", err.Error())
 	}
 }

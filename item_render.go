@@ -6,8 +6,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// appendColTo renders the item as a row in the PDF items table
-func (i *Item) appendColTo(options *Options, doc *Document) {
+// appendColTo renders the item as a row in the PDF items table.
+// It must be called with the target document — page break handling is the
+// caller's responsibility (see appendItems which wraps this in pageTxn).
+func (i *Item) appendColTo(doc *Document) {
 	baseY := doc.pdf.GetY()
 
 	// Name
