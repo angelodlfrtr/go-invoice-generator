@@ -96,10 +96,10 @@ func main() {
 
 ## Document types
 
-| Constant | Value |
-|---|---|
-| `generator.Invoice` | `"INVOICE"` |
-| `generator.Quotation` | `"QUOTATION"` |
+| Constant                 | Value             |
+| ------------------------ | ----------------- |
+| `generator.Invoice`      | `"INVOICE"`       |
+| `generator.Quotation`    | `"QUOTATION"`     |
 | `generator.DeliveryNote` | `"DELIVERY_NOTE"` |
 
 ```go

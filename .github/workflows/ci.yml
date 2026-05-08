@@ -1,0 +1,51 @@
+name: golangci-lint
+on: push
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Install nix
+      - uses: nixbuild/nix-quick-install-action@v34
+        with:
+          # Needed for "runAsRoot" capability (container build)
+          # https://github.com/nix-community/nixos-generators/issues/83
+          # https://discourse.nixos.org/t/kvm-is-required-error-building-a-docker-image-using-runasroot/22923/2
+          nix_conf: |
+            system-features = kvm
+
+      # NIX cache
+      - name: Restore and cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          # restore and save a cache using this key
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix') }}-${{ hashFiles('**/flake.lock') }}
+          # if there's no cache hit, restore a cache by this prefix
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          # collect garbage until Nix store size (in bytes) is at most this number
+          # before trying to save a new cache
+          gc-max-store-size-linux: 1G
+          # do purge caches
+          purge: true
+          # purge all versions of the cache
+          purge-prefixes: nix-${{ runner.os }}-
+          # created more than this number of seconds ago relative to the start of the `Post Restore` phase
+          purge-created: 0
+          # or last accessed this duration (ISO 8601 duration format)
+          # before the start of the `Post Restore and save Nix store` phase
+          purge-last-accessed: P1DT12H
+          # except the version with the `primary-key`, if it exists
+          purge-primary-key: never
+
+      - name: fmt
+        run: nix develop --command make fmt-check
+
+      - name: gosec
+        run: nix develop --command make gosec
+
+      - name: lint
+        run: nix develop --command make lint
+
+      - name: test
+        run: nix develop --command make test
