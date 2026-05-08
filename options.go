@@ -37,8 +37,8 @@ type Options struct {
 	GreyBgColor   []int `default:"[232,232,232]" json:"grey_bg_color,omitempty"`
 	DarkBgColor   []int `default:"[212,212,212]" json:"dark_bg_color,omitempty"`
 
-	Font     string `default:"Helvetica"`
-	BoldFont string `default:"Helvetica"`
+	Font     string `default:"Roboto"`
+	BoldFont string `default:"Roboto"`
 
 	UnicodeTranslateFunc UnicodeTranslateFunc
 }

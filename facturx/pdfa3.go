@@ -30,6 +30,14 @@ func embedXMLWithAFRelationship(ctx *model.Context, xmlBytes []byte) error {
 	if err != nil {
 		return fmt.Errorf("embedded stream: %w", err)
 	}
+	// PDF/A-3 clause 6.8: the EmbeddedFile stream must carry a MIME Subtype.
+	// pdfcpu encodes '/' as '#2f' when writing Name tokens.
+	if entry, found := xrt.FindTableEntryForIndRef(streamIR); found && entry != nil {
+		if sd, ok := entry.Object.(types.StreamDict); ok {
+			sd.InsertName("Subtype", "text/xml")
+			entry.Object = sd
+		}
+	}
 
 	fsDict, err := xrt.NewFileSpecDict(xmlFilename, xmlFilename, "Factur-X Electronic Invoice", *streamIR)
 	if err != nil {

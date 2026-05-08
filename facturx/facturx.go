@@ -65,8 +65,8 @@ func attachFX(pdfBytes, xmlBytes []byte, profile Profile) ([]byte, error) {
 		return nil, fmt.Errorf("output intent: %w", err)
 	}
 
-	if err := mergeXMPInContext(ctx, profile); err != nil {
-		return nil, fmt.Errorf("merge XMP: %w", err)
+	if err := ensureXMPInContext(ctx, profile); err != nil {
+		return nil, fmt.Errorf("ensure XMP: %w", err)
 	}
 
 	var out bytes.Buffer
