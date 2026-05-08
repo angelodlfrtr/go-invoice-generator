@@ -56,6 +56,9 @@ func (doc *Document) Tax() decimal.Decimal {
 		discountType, discountAmount := doc.Discount.getDiscount()
 		discountPercent := discountAmount
 		if discountType == DiscountTypeAmount {
+			if totalWithoutTaxAndWithoutDocDiscount.IsZero() {
+				return decimal.NewFromFloat(0)
+			}
 			// Get percent from total discounted
 			discountPercent = discountAmount.Mul(decimal.NewFromFloat(100)).Div(totalWithoutTaxAndWithoutDocDiscount)
 		}

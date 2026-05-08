@@ -54,11 +54,7 @@ func (i *Item) Prepare() error {
 
 // TotalWithoutTaxAndWithoutDiscount returns the total without tax and without discount
 func (i *Item) TotalWithoutTaxAndWithoutDiscount() decimal.Decimal {
-	quantity, _ := decimal.NewFromString(i.Quantity)
-	price, _ := decimal.NewFromString(i.UnitCost)
-	total := price.Mul(quantity)
-
-	return total
+	return i._unitCost.Mul(i._quantity)
 }
 
 // TotalWithoutTaxAndWithDiscount returns the total without tax and with discount

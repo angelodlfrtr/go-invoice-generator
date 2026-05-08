@@ -269,11 +269,6 @@ func (doc *Document) appendItems() {
 	for i := 0; i < len(doc.Items); i++ {
 		item := doc.Items[i]
 
-		// Check item tax
-		if item.Tax == nil {
-			item.Tax = doc.DefaultTax
-		}
-
 		// Append to pdf
 		item.appendColTo(doc.Options, doc)
 

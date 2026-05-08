@@ -30,6 +30,10 @@ func (t *Tax) Prepare() error {
 		return ErrInvalidTax
 	}
 
+	if len(t.Percent) > 0 && len(t.Amount) > 0 {
+		return ErrInvalidTax
+	}
+
 	// Percent
 	if len(t.Percent) > 0 {
 		percent, err := decimal.NewFromString(t.Percent)

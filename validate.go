@@ -13,6 +13,9 @@ func (d *Document) Validate() error {
 
 	// Prepare items
 	for _, item := range d.Items {
+		if item.Tax == nil {
+			item.Tax = d.DefaultTax
+		}
 		if err := item.Prepare(); err != nil {
 			return err
 		}

@@ -30,6 +30,10 @@ func (d *Discount) Prepare() error {
 		return ErrInvalidDiscount
 	}
 
+	if len(d.Percent) > 0 && len(d.Amount) > 0 {
+		return ErrInvalidDiscount
+	}
+
 	// Percent
 	if len(d.Percent) > 0 {
 		percent, err := decimal.NewFromString(d.Percent)
