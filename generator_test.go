@@ -6,6 +6,100 @@ import (
 	"testing"
 )
 
+func TestNewWithNamedTaxes(t *testing.T) {
+	doc, err := New(Invoice, &Options{
+		TextTypeInvoice:   "INVOICE",
+		CurrencySymbol:    "€ ",
+		CurrencyPrecision: 2,
+	})
+	if err != nil {
+		t.Fatalf("got error %v", err)
+	}
+
+	doc.SetRef("INV-TAX-001")
+	doc.SetDate("01/05/2025")
+	doc.SetPaymentTerm("01/06/2025")
+
+	doc.SetCompany(&Contact{
+		Name: "Acme Inc",
+		Address: &Address{
+			Address:    "12 Rue de la Paix",
+			PostalCode: "75001",
+			City:       "Paris",
+			Country:    "FR",
+		},
+	})
+
+	doc.SetCustomer(&Contact{
+		Name: "Client Corp",
+		Address: &Address{
+			Address:    "5 Rue de la République",
+			PostalCode: "69001",
+			City:       "Lyon",
+			Country:    "FR",
+		},
+	})
+
+	// Standard rate VAT 20%
+	doc.AppendItem(&Item{
+		Name:     "Consulting services",
+		UnitCost: "1500.00",
+		Quantity: "3",
+		Tax:      &Tax{Name: "VAT 20%", Percent: "20"},
+	})
+	doc.AppendItem(&Item{
+		Name:     "Software development",
+		UnitCost: "800.00",
+		Quantity: "5",
+		Tax:      &Tax{Name: "VAT 20%", Percent: "20"},
+	})
+
+	// Reduced rate VAT 10%
+	doc.AppendItem(&Item{
+		Name:     "Professional training",
+		UnitCost: "600.00",
+		Quantity: "2",
+		Tax:      &Tax{Name: "VAT 10%", Percent: "10"},
+	})
+
+	// Super-reduced rate VAT 5.5%
+	doc.AppendItem(&Item{
+		Name:     "Technical books",
+		UnitCost: "45.00",
+		Quantity: "10",
+		Tax:      &Tax{Name: "VAT 5.5%", Percent: "5.5"},
+	})
+
+	// Fixed tax
+	doc.AppendItem(&Item{
+		Name:     "Hardware component",
+		UnitCost: "45.00",
+		Quantity: "10",
+		Tax:      &Tax{Name: "Eco tax", Amount: "5.67"},
+	})
+
+	// Item with no tax name — should appear under "Other" in the breakdown
+	doc.AppendItem(&Item{
+		Name:     "Shipping",
+		UnitCost: "12.50",
+		Quantity: "1",
+		Tax:      &Tax{Percent: "20"},
+	})
+
+	pdf, err := doc.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if err := os.MkdirAll("out", 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	if err := pdf.OutputFileAndClose("out/invoice_named_taxes.pdf"); err != nil {
+		t.Fatalf("OutputFileAndClose: %v", err)
+	}
+}
+
 func TestNewWithInvalidType(t *testing.T) {
 	_, err := New("INVALID", &Options{})
 
@@ -18,7 +112,7 @@ func TestNewWithInvalidType(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	doc, err := New(Invoice, &Options{
-		TextTypeInvoice: "FACTURE",
+		TextTypeInvoice: "INVOICE",
 		TextRefTitle:    "Réàf.",
 		// BaseTextColor:     []int{6, 63, 156},
 		// GreyTextColor:     []int{161, 96, 149},
@@ -55,11 +149,11 @@ func TestNew(t *testing.T) {
 		Name: "Test Company",
 		Logo: logoBytes,
 		Address: &Address{
-			Address:    "89 Rue de Brest",
+			Address:    "89 Avenue Victor Hugo",
 			Address2:   "Appartement 2",
 			PostalCode: "75000",
 			City:       "Paris",
-			Country:    "France",
+			Country:    "FR",
 		},
 		AddtionnalInfo: []string{"Cupcake: ipsum dolor"},
 	})
@@ -68,9 +162,9 @@ func TestNew(t *testing.T) {
 		Name: "Test Customer",
 		Address: &Address{
 			Address:    "89 Rue de Paris",
-			PostalCode: "29200",
-			City:       "Brest",
-			Country:    "France",
+			PostalCode: "13001",
+			City:       "Marseille",
+			Country:    "FR",
 		},
 		AddtionnalInfo: []string{
 			"Cupcake: ipsum dolor",
@@ -146,7 +240,11 @@ func TestNew(t *testing.T) {
 		t.Errorf("%v", err.Error())
 	}
 
-	err = pdf.OutputFileAndClose("out.pdf")
+	if err := os.MkdirAll("out", 0o755); err != nil {
+		t.Errorf("%v", err.Error())
+	}
+
+	err = pdf.OutputFileAndClose("out/invoice.pdf")
 	if err != nil {
 		t.Errorf("%v", err.Error())
 	}

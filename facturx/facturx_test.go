@@ -92,7 +92,11 @@ func TestAttach(t *testing.T) {
 		t.Fatal("Attach returned empty result")
 	}
 
-	if err := os.WriteFile("out.pdf", result, 0o644); err != nil {
+	if err := os.MkdirAll("../out", 0o755); err != nil {
+		t.Fatalf("mkdir out: %v", err)
+	}
+
+	if err := os.WriteFile("../out/facturx.pdf", result, 0o644); err != nil {
 		t.Fatalf("write out.pdf: %v", err)
 	}
 }

@@ -72,6 +72,7 @@ const (
 
 // Tax defines a tax as either a percentage or a fixed amount (mutually exclusive)
 type Tax struct {
+	Name    string `json:"name,omitempty"`    // e.g. "TVA"
 	Percent string `json:"percent,omitempty"` // e.g. "20"
 	Amount  string `json:"amount,omitempty"`  // e.g. "89"
 

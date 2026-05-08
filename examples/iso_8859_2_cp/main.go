@@ -70,7 +70,11 @@ func main() {
 		panic(err)
 	}
 
-	if err := pdf.OutputFileAndClose("out.pdf"); err != nil {
+	if err := os.MkdirAll("out", 0o755); err != nil {
+		panic(err)
+	}
+
+	if err := pdf.OutputFileAndClose("out/out.pdf"); err != nil {
 		panic(err)
 	}
 }

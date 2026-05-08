@@ -396,30 +396,42 @@ func (doc *Document) appendTotal() {
 		doc.pdf.SetY(doc.pdf.GetY() + 10)
 	}
 
-	// Draw tax title
+	// Draw main TAX line (always same size).
 	doc.pdf.SetX(120)
 	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
 	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")
 	doc.pdf.CellFormat(38, 10, doc.encodeString(doc.Options.TextTotalTax), "0", 0, "R", false, 0, "")
-
-	// Draw tax amount
 	doc.pdf.SetX(162)
 	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
 	doc.pdf.Rect(160, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(
-		40,
-		10,
-		doc.encodeString(doc.ac.FormatMoneyDecimal(doc.Tax())),
-		"0",
-		0,
-		"L",
-		false,
-		0,
-		"",
-	)
+	doc.pdf.CellFormat(40, 10, doc.encodeString(doc.ac.FormatMoneyDecimal(doc.Tax())), "0", 0, "L", false, 0, "")
+	doc.pdf.SetY(doc.pdf.GetY() + 10)
+
+	// Draw per-name breakdown in smaller font when named taxes exist.
+	if taxLines := doc.TaxLines(); taxLines != nil {
+		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
+		doc.pdf.SetTextColor(doc.Options.GreyTextColor[0], doc.Options.GreyTextColor[1], doc.Options.GreyTextColor[2])
+		for _, tl := range taxLines {
+			label := tl.Name
+			if label == "" {
+				label = doc.Options.TextTotalTaxOther
+				if label == "" {
+					label = "Other"
+				}
+			}
+			doc.pdf.SetX(120)
+			doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
+			doc.pdf.Rect(120, doc.pdf.GetY(), 80, 6, "F")
+			doc.pdf.CellFormat(38, 6, doc.encodeString(label), "0", 0, "R", false, 0, "")
+			doc.pdf.SetX(162)
+			doc.pdf.CellFormat(40, 6, doc.encodeString(doc.ac.FormatMoneyDecimal(tl.Amount)), "0", 0, "L", false, 0, "")
+			doc.pdf.SetY(doc.pdf.GetY() + 6)
+		}
+		doc.pdf.SetFont(doc.Options.Font, "", LargeTextFontSize)
+		doc.pdf.SetTextColor(doc.Options.BaseTextColor[0], doc.Options.BaseTextColor[1], doc.Options.BaseTextColor[2])
+	}
 
 	// Draw total with tax title
-	doc.pdf.SetY(doc.pdf.GetY() + 10)
 	doc.pdf.SetX(120)
 	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
 	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")

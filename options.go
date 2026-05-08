@@ -27,10 +27,11 @@ type Options struct {
 	TextItemsDiscountTitle string `default:"Discount" json:"text_items_discount_title,omitempty"`
 	TextItemsTotalTTCTitle string `default:"Total" json:"text_items_total_ttc_title,omitempty"`
 
-	TextTotalTotal      string `default:"TOTAL" json:"text_total_total,omitempty"`
-	TextTotalDiscounted string `default:"TOTAL DISCOUNTED" json:"text_total_discounted,omitempty"`
-	TextTotalTax        string `default:"TAX" json:"text_total_tax,omitempty"`
-	TextTotalWithTax    string `default:"TOTAL WITH TAX" json:"text_total_with_tax,omitempty"`
+	TextTotalTotal      string `default:"Total" json:"text_total_total,omitempty"`
+	TextTotalDiscounted string `default:"Total discounted" json:"text_total_discounted,omitempty"`
+	TextTotalTax        string `default:"Tax" json:"text_total_tax,omitempty"`
+	TextTotalTaxOther   string `default:"Other" json:"text_total_tax_other,omitempty"`
+	TextTotalWithTax    string `default:"Total with tax" json:"text_total_with_tax,omitempty"`
 
 	BaseTextColor []int `default:"[35,35,35]" json:"base_text_color,omitempty"`
 	GreyTextColor []int `default:"[82,82,82]" json:"grey_text_color,omitempty"`
