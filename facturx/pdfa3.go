@@ -10,10 +10,6 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
-// fpdfProducer is the Producer string written by the underlying PDF engine.
-// Used as a reference when patching metadata.
-const fpdfProducer = "FPDF"
-
 //go:embed srgb.icc
 var srgbICCProfile []byte
 

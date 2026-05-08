@@ -24,6 +24,10 @@ testwithcover:
 	go test -count 1 --coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
 
+.PHONY: verapdf-check-3b
+verapdf-check-3b: test
+	verapdf --flavour 3b facturx/out.pdf
+
 .PHONY: clean
 clean:
-	rm -Rf coverage.out out.pdf
+	rm -Rf coverage.out out.pdf facturx/out.pdf

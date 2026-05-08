@@ -170,6 +170,6 @@ func setMetadataStreamMeta(sd *types.StreamDict) {
 	sd.InsertName("Type", "Metadata")
 	sd.InsertName("Subtype", "XML")
 	sd.FilterPipeline = nil
-	sd.Dict.Delete("Filter")
-	sd.Dict.Delete("DecodeParms")
+	sd.Delete("Filter")
+	sd.Delete("DecodeParms")
 }

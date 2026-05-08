@@ -18,6 +18,8 @@ built on top of [go-pdf/fpdf](https://codeberg.org/go-pdf/fpdf).
 - Unicode support via a configurable translation function
 - Fully customisable labels, colours, and currency formatting
 - Output to file or `[]byte`
+- Roboto font embedded by default — no external font files required
+- Optional [Factur-X](#factur-x--wip--experimental) subpackage produces **PDF/A-3B** compliant e-invoices (verified with veraPDF in CI)
 
 ## Installation
 
@@ -146,9 +148,10 @@ doc, err := generator.New(generator.Invoice, &generator.Options{
 	GreyBgColor:   []int{232, 232, 232},
 	DarkBgColor:   []int{212, 212, 212},
 
-	// Fonts (must be available to fpdf)
-	Font:     "Helvetica",
-	BoldFont: "Helvetica",
+	// Font family name. Roboto is embedded and used by default; any font
+	// registered on the underlying fpdf instance can be used here.
+	Font:     "Roboto",  // default: "Roboto"
+	BoldFont: "Roboto",  // default: "Roboto"
 })
 ```
 
@@ -429,22 +432,17 @@ Line items are included in the XML for `ProfileBasic` and above; `ProfileMinimum
 
 ### Options
 
-| Field             | Type    | Description                                                                 |
-| ----------------- | ------- | --------------------------------------------------------------------------- |
-| `Profile`         | Profile | Conformance level (default: `ProfileMinimum`)                               |
-| `CurrencyCode`    | string  | ISO 4217 code (default: `"EUR"`)                                            |
-| `SellerTaxID`     | string  | Seller VAT registration number (e.g. `"FR12345678901"`)                     |
-| `BuyerReference`  | string  | Buyer's internal reference (e.g. a purchase order number)                   |
-| `PaymentDueDate`  | string  | Payment due date in `"YYYYMMDD"` format                                     |
-| `PaymentIBAN`     | string  | Seller IBAN for bank transfer                                               |
-| `PaymentBIC`      | string  | Seller BIC/SWIFT code                                                       |
+| Field             | Type    | Description                                                                |
+| ----------------- | ------- | -------------------------------------------------------------------------- |
+| `Profile`         | Profile | Conformance level (default: `ProfileMinimum`)                              |
+| `CurrencyCode`    | string  | ISO 4217 code (default: `"EUR"`)                                           |
+| `SellerTaxID`     | string  | Seller VAT registration number (e.g. `"FR12345678901"`)                    |
+| `BuyerReference`  | string  | Buyer's internal reference (e.g. a purchase order number)                  |
+| `PaymentDueDate`  | string  | Payment due date in `"YYYYMMDD"` format                                    |
+| `PaymentIBAN`     | string  | Seller IBAN for bank transfer                                              |
+| `PaymentBIC`      | string  | Seller BIC/SWIFT code                                                      |
 | `TaxCategoryCode` | string  | Default VAT category code — `"S"` standard, `"E"` exempt, `"Z"` zero-rated |
-| `TypeCode`        | string  | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)         |
-
-### Limitations
-
-- The XMP merge step requires the base PDF to contain an XMP packet (fpdf produces one by default). If no XMP packet is found the PDF is returned unchanged.
-- Full PDF/A-3 conformance (no device colour spaces on page content, all fonts subset-embedded) depends on the base PDF produced by fpdf. The sRGB OutputIntent satisfies the ICC profile requirement; other conformance gaps may still be flagged by strict validators.
+| `TypeCode`        | string  | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)        |
 
 ---
 
