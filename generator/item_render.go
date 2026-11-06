@@ -4,109 +4,112 @@ import (
 	"fmt"
 
 	"github.com/shopspring/decimal"
+
+	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 )
 
-// appendColTo renders the item as a row in the PDF items table.
-// It must be called with the target document — page break handling is the
-// caller's responsibility (see appendItems which wraps this in pageTxn).
-func (i *Item) appendColTo(doc *Document) {
-	baseY := doc.pdf.GetY()
+var hundred = decimal.NewFromInt(100)
+
+// appendItem draws one row of the items table at the current position. Page
+// break handling is the caller's responsibility (see appendItems).
+func (r *renderer) appendItem(i *invoice.Item) {
+	baseY := r.pdf.GetY()
 
 	// Name
-	doc.pdf.SetX(ItemColNameOffset)
-	doc.pdf.MultiCell(ItemColUnitPriceOffset-ItemColNameOffset, 3, doc.encodeString(i.Name), "", "", false)
+	r.pdf.SetX(ItemColNameOffset)
+	r.pdf.MultiCell(ItemColUnitPriceOffset-ItemColNameOffset, 3, r.encode(i.Name), "", "", false)
 
 	// Description
 	if len(i.Description) > 0 {
-		doc.pdf.SetX(ItemColNameOffset)
-		doc.pdf.SetY(doc.pdf.GetY() + 1)
-		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.GreyTextColor[0], doc.Options.GreyTextColor[1], doc.Options.GreyTextColor[2])
-		doc.pdf.MultiCell(ItemColUnitPriceOffset-ItemColNameOffset, 3, doc.encodeString(i.Description), "", "", false)
-		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.BaseTextColor[0], doc.Options.BaseTextColor[1], doc.Options.BaseTextColor[2])
+		r.pdf.SetX(ItemColNameOffset)
+		r.pdf.SetY(r.pdf.GetY() + 1)
+		r.pdf.SetFont(r.opts.Font, "", SmallTextFontSize)
+		r.setTextColor(r.opts.GreyTextColor)
+		r.pdf.MultiCell(ItemColUnitPriceOffset-ItemColNameOffset, 3, r.encode(i.Description), "", "", false)
+		r.pdf.SetFont(r.opts.Font, "", BaseTextFontSize)
+		r.setTextColor(r.opts.BaseTextColor)
 	}
 
-	colHeight := doc.pdf.GetY() - baseY
+	colHeight := r.pdf.GetY() - baseY
 
 	// Unit price
-	doc.pdf.SetY(baseY)
-	doc.pdf.SetX(ItemColUnitPriceOffset)
-	doc.pdf.CellFormat(ItemColQuantityOffset-ItemColUnitPriceOffset, colHeight, doc.encodeString(doc.ac.FormatMoneyDecimal(i._unitCost)), "0", 0, "", false, 0, "")
+	r.pdf.SetY(baseY)
+	r.pdf.SetX(ItemColUnitPriceOffset)
+	r.pdf.CellFormat(ItemColQuantityOffset-ItemColUnitPriceOffset, colHeight, r.encode(r.money(i.UnitCostDecimal())), "0", 0, "", false, 0, "")
 
 	// Quantity
-	doc.pdf.SetX(ItemColQuantityOffset)
-	doc.pdf.CellFormat(ItemColTaxOffset-ItemColQuantityOffset, colHeight, doc.encodeString(i._quantity.String()), "0", 0, "", false, 0, "")
+	r.pdf.SetX(ItemColQuantityOffset)
+	r.pdf.CellFormat(ItemColTaxOffset-ItemColQuantityOffset, colHeight, r.encode(i.QuantityDecimal().String()), "0", 0, "", false, 0, "")
 
-	// Total HT (before discount)
-	doc.pdf.SetX(ItemColTotalHTOffset)
-	doc.pdf.CellFormat(ItemColTaxOffset-ItemColTotalHTOffset, colHeight, doc.encodeString(doc.ac.FormatMoneyDecimal(i.TotalWithoutTaxAndWithoutDiscount())), "0", 0, "", false, 0, "")
+	// Total before discount
+	r.pdf.SetX(ItemColTotalHTOffset)
+	r.pdf.CellFormat(ItemColTaxOffset-ItemColTotalHTOffset, colHeight, r.encode(r.money(i.TotalWithoutTaxAndWithoutDiscount())), "0", 0, "", false, 0, "")
 
 	// Discount
-	doc.pdf.SetX(ItemColDiscountOffset)
+	r.pdf.SetX(ItemColDiscountOffset)
 	if i.Discount == nil {
-		doc.pdf.CellFormat(ItemColTotalTTCOffset-ItemColDiscountOffset, colHeight, doc.encodeString("--"), "0", 0, "", false, 0, "")
+		r.pdf.CellFormat(ItemColTotalTTCOffset-ItemColDiscountOffset, colHeight, r.encode("--"), "0", 0, "", false, 0, "")
 	} else {
-		discountType, discountAmount := i.Discount.getDiscount()
+		discountType, discountAmount := i.Discount.Value()
 		dCost := i.TotalWithoutTaxAndWithoutDiscount()
 
-		var discountTitle, discountDesc string
-		if discountType == DiscountTypePercent {
-			discountTitle = fmt.Sprintf("%s %s", discountAmount, doc.encodeString("%"))
-			dAmount := dCost.Mul(discountAmount.Div(decimal.NewFromFloat(100)))
-			discountDesc = fmt.Sprintf("-%s", doc.ac.FormatMoneyDecimal(dAmount))
+		var title, desc string
+		if discountType == invoice.DiscountTypePercent {
+			title = fmt.Sprintf("%s %s", discountAmount, r.encode("%"))
+			desc = fmt.Sprintf("-%s", r.money(dCost.Mul(discountAmount.Div(hundred))))
 		} else {
-			discountTitle = fmt.Sprintf("%s %s", discountAmount, doc.encodeString("€"))
-			dPerc := discountAmount.Mul(decimal.NewFromFloat(100)).Div(dCost)
-			discountDesc = fmt.Sprintf("-%s %%", dPerc.StringFixed(2))
+			title = fmt.Sprintf("%s %s", discountAmount, r.encode(r.ac.Symbol))
+			if dCost.IsZero() {
+				desc = "-0.00 %"
+			} else {
+				desc = fmt.Sprintf("-%s %%", discountAmount.Mul(hundred).Div(dCost).StringFixed(2))
+			}
 		}
-
-		doc.pdf.CellFormat(ItemColTotalTTCOffset-ItemColDiscountOffset, colHeight/2, doc.encodeString(discountTitle), "0", 0, "LB", false, 0, "")
-
-		doc.pdf.SetXY(ItemColDiscountOffset, baseY+(colHeight/2))
-		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.GreyTextColor[0], doc.Options.GreyTextColor[1], doc.Options.GreyTextColor[2])
-		doc.pdf.CellFormat(ItemColTotalTTCOffset-ItemColDiscountOffset, colHeight/2, doc.encodeString(discountDesc), "0", 0, "LT", false, 0, "")
-
-		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.BaseTextColor[0], doc.Options.BaseTextColor[1], doc.Options.BaseTextColor[2])
-		doc.pdf.SetY(baseY)
+		r.twoLineCell(ItemColDiscountOffset, ItemColTotalTTCOffset-ItemColDiscountOffset, baseY, colHeight, title, desc)
 	}
 
 	// Tax
-	doc.pdf.SetX(ItemColTaxOffset)
+	r.pdf.SetX(ItemColTaxOffset)
 	if i.Tax == nil {
-		doc.pdf.CellFormat(ItemColDiscountOffset-ItemColTaxOffset, colHeight, doc.encodeString("--"), "0", 0, "", false, 0, "")
+		r.pdf.CellFormat(ItemColDiscountOffset-ItemColTaxOffset, colHeight, r.encode("--"), "0", 0, "", false, 0, "")
 	} else {
-		taxType, taxAmount := i.Tax.getTax()
+		taxType, taxAmount := i.Tax.Value()
 		dCost := i.TotalWithoutTaxAndWithDiscount()
 
-		var taxTitle, taxDesc string
-		if taxType == TaxTypePercent {
-			taxTitle = fmt.Sprintf("%s %s", taxAmount, "%")
-			dAmount := dCost.Mul(taxAmount.Div(decimal.NewFromFloat(100)))
-			taxDesc = doc.ac.FormatMoneyDecimal(dAmount)
+		var title, desc string
+		if taxType == invoice.TaxTypePercent {
+			title = fmt.Sprintf("%s %s", taxAmount, "%")
+			desc = r.money(dCost.Mul(taxAmount.Div(hundred)))
 		} else {
-			taxTitle = fmt.Sprintf("%s %s", doc.ac.Symbol, taxAmount)
-			dPerc := taxAmount.Mul(decimal.NewFromFloat(100)).Div(dCost)
-			taxDesc = fmt.Sprintf("%s %%", dPerc.StringFixed(2))
+			title = fmt.Sprintf("%s %s", r.ac.Symbol, taxAmount)
+			if dCost.IsZero() {
+				desc = "0.00 %"
+			} else {
+				desc = fmt.Sprintf("%s %%", taxAmount.Mul(hundred).Div(dCost).StringFixed(2))
+			}
 		}
-
-		doc.pdf.CellFormat(ItemColDiscountOffset-ItemColTaxOffset, colHeight/2, doc.encodeString(taxTitle), "0", 0, "LB", false, 0, "")
-
-		doc.pdf.SetXY(ItemColTaxOffset, baseY+(colHeight/2))
-		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.GreyTextColor[0], doc.Options.GreyTextColor[1], doc.Options.GreyTextColor[2])
-		doc.pdf.CellFormat(ItemColDiscountOffset-ItemColTaxOffset, colHeight/2, doc.encodeString(taxDesc), "0", 0, "LT", false, 0, "")
-
-		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.BaseTextColor[0], doc.Options.BaseTextColor[1], doc.Options.BaseTextColor[2])
-		doc.pdf.SetY(baseY)
+		r.twoLineCell(ItemColTaxOffset, ItemColDiscountOffset-ItemColTaxOffset, baseY, colHeight, title, desc)
 	}
 
-	// Total TTC
-	doc.pdf.SetX(ItemColTotalTTCOffset)
-	doc.pdf.CellFormat(190-ItemColTotalTTCOffset, colHeight, doc.encodeString(doc.ac.FormatMoneyDecimal(i.TotalWithTaxAndDiscount())), "0", 0, "", false, 0, "")
+	// Total with tax
+	r.pdf.SetX(ItemColTotalTTCOffset)
+	r.pdf.CellFormat(190-ItemColTotalTTCOffset, colHeight, r.encode(r.money(i.TotalWithTaxAndDiscount())), "0", 0, "", false, 0, "")
 
-	doc.pdf.SetY(baseY + colHeight)
+	r.pdf.SetY(baseY + colHeight)
+}
+
+// twoLineCell draws title on the upper half and desc, in small grey text, on
+// the lower half of a cell, then restores font and Y.
+func (r *renderer) twoLineCell(x, w, baseY, height float64, title, desc string) {
+	r.pdf.SetXY(x, baseY)
+	r.pdf.CellFormat(w, height/2, r.encode(title), "0", 0, "LB", false, 0, "")
+
+	r.pdf.SetXY(x, baseY+(height/2))
+	r.pdf.SetFont(r.opts.Font, "", SmallTextFontSize)
+	r.setTextColor(r.opts.GreyTextColor)
+	r.pdf.CellFormat(w, height/2, r.encode(desc), "0", 0, "LT", false, 0, "")
+
+	r.pdf.SetFont(r.opts.Font, "", BaseTextFontSize)
+	r.setTextColor(r.opts.BaseTextColor)
+	r.pdf.SetY(baseY)
 }

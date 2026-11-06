@@ -1,62 +1,35 @@
 package generator
 
+// Layout constants, in millimetres on an A4 portrait page.
 const (
-	// Invoice define the "invoice" document type
-	Invoice string = "INVOICE"
-
-	// Quotation define the "quotation" document type
-	Quotation string = "QUOTATION"
-
-	// DeliveryNote define the "delievry note" document type
-	DeliveryNote string = "DELIVERY_NOTE"
-
-	// BaseMargin define base margin used in documents
+	// BaseMargin is the left and right margin.
 	BaseMargin float64 = 10
 
-	// BaseMarginTop define base margin top used in documents
+	// BaseMarginTop is the top margin.
 	BaseMarginTop float64 = 20
 
-	// HeaderMarginTop define base header margin top used in documents
+	// HeaderMarginTop is the top margin of the page header.
 	HeaderMarginTop float64 = 5
 
-	// MaxPageHeight define the maximum height for a single page
+	// MaxPageHeight is the Y position past which content moves to a new page.
 	MaxPageHeight float64 = 260
 )
 
-// Cols offsets
+// Item table column offsets.
 const (
-	// ItemColNameOffset ...
-	ItemColNameOffset float64 = 10
-
-	// ItemColUnitPriceOffset ...
+	ItemColNameOffset      float64 = 10
 	ItemColUnitPriceOffset float64 = 80
-
-	// ItemColQuantityOffset ...
-	ItemColQuantityOffset float64 = 103
-
-	// ItemColTotalHTOffset ...
-	ItemColTotalHTOffset float64 = 113
-
-	// ItemColDiscountOffset ...
-	ItemColDiscountOffset float64 = 140
-
-	// ItemColTaxOffset ...
-	ItemColTaxOffset float64 = 157
-
-	// ItemColTotalTTCOffset ...
-	ItemColTotalTTCOffset float64 = 175
+	ItemColQuantityOffset  float64 = 103
+	ItemColTotalHTOffset   float64 = 113
+	ItemColDiscountOffset  float64 = 140
+	ItemColTaxOffset       float64 = 157
+	ItemColTotalTTCOffset  float64 = 175
 )
 
+// Font sizes.
 var (
-	// BaseTextFontSize define the base font size for text in document
-	BaseTextFontSize float64 = 8
-
-	// SmallTextFontSize define the small font size for text in document
-	SmallTextFontSize float64 = 7
-
-	// ExtraSmallTextFontSize define the extra small font size for text in document
+	BaseTextFontSize       float64 = 8
+	SmallTextFontSize      float64 = 7
 	ExtraSmallTextFontSize float64 = 6
-
-	// LargeTextFontSize define the large font size for text in document
-	LargeTextFontSize float64 = 10
+	LargeTextFontSize      float64 = 10
 )

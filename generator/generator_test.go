@@ -8,9 +8,8 @@ import (
 
 func TestNewWithNamedTaxes(t *testing.T) {
 	doc, err := New(Invoice, &Options{
-		TextTypeInvoice:   "INVOICE",
-		CurrencySymbol:    "€ ",
-		CurrencyPrecision: 2,
+		TextTypeInvoice: "INVOICE",
+		CurrencySymbol:  "€ ",
 	})
 	if err != nil {
 		t.Fatalf("got error %v", err)
@@ -118,7 +117,6 @@ func TestNew(t *testing.T) {
 		// GreyTextColor:     []int{161, 96, 149},
 		// GreyBgColor:       []int{171, 240, 129},
 		// DarkBgColor:       []int{176, 12, 20},
-		CurrencyPrecision: 2,
 	})
 	if err != nil {
 		t.Fatalf("got error %v", err)
@@ -155,7 +153,7 @@ func TestNew(t *testing.T) {
 			City:       "Paris",
 			Country:    "FR",
 		},
-		AddtionnalInfo: []string{"Cupcake: ipsum dolor"},
+		AdditionalInfo: []string{"Cupcake: ipsum dolor"},
 	})
 
 	doc.SetCustomer(&Contact{
@@ -166,7 +164,7 @@ func TestNew(t *testing.T) {
 			City:       "Marseille",
 			Country:    "FR",
 		},
-		AddtionnalInfo: []string{
+		AdditionalInfo: []string{
 			"Cupcake: ipsum dolor",
 			"Cupcake: ipsum dolo r",
 		},

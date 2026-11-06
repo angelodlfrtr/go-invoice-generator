@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
+	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 	pdfcpuapi "github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
@@ -32,7 +32,7 @@ const xmlFilename = "factur-x.xml"
 //
 // doc.Build() (which calls doc.Validate()) must have been called before Attach
 // so that all monetary values are computed.
-func Attach(pdfBytes []byte, doc *generator.Document, opts Options) ([]byte, error) {
+func Attach(pdfBytes []byte, doc *invoice.Document, opts Options) ([]byte, error) {
 	xmlBytes, err := BuildXML(doc, opts)
 	if err != nil {
 		return nil, fmt.Errorf("facturx: build XML: %w", err)

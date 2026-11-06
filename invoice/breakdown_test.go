@@ -1,4 +1,4 @@
-package generator
+package invoice
 
 import (
 	"testing"
@@ -24,7 +24,7 @@ func assertDec(t *testing.T, what string, got decimal.Decimal, want string) {
 
 func breakdownDoc(t *testing.T) *Document {
 	t.Helper()
-	doc, err := New(Invoice, &Options{CurrencyPrecision: 2})
+	doc, err := New(Invoice)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,14 +162,13 @@ func TestTaxLinesNilWithoutNames(t *testing.T) {
 	}
 }
 
-// TestBreakdownPrecision uses precision 1 (0 is indistinguishable from unset
-// for the defaults library, which then applies 2).
+// TestBreakdownPrecision rounds everything to one decimal.
 func TestBreakdownPrecision(t *testing.T) {
-	doc, err := New(Invoice, &Options{CurrencyPrecision: 1})
+	doc, err := New(Invoice)
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc.SetRef("BD-2").SetDate("01/01/2024")
+	doc.SetRef("BD-2").SetDate("01/01/2024").SetCurrency("EUR", 1)
 	doc.SetCompany(&Contact{Name: "A", Address: &Address{Address: "x"}})
 	doc.SetCustomer(&Contact{Name: "B", Address: &Address{Address: "y"}})
 	doc.AppendItem(&Item{Name: "a", UnitCost: "1234.56", Quantity: "1", Tax: &Tax{Percent: "10"}})

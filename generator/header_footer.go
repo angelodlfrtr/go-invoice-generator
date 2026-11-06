@@ -3,8 +3,8 @@ package generator
 import (
 	"fmt"
 
-	"github.com/creasty/defaults"
 	"codeberg.org/go-pdf/fpdf"
+	"github.com/creasty/defaults"
 )
 
 // HeaderFooter define header or footer informations on document
@@ -23,7 +23,7 @@ func (hf *HeaderFooter) ApplyFunc(pdf *fpdf.Fpdf, fn fnc) {
 }
 
 // applyHeader apply header to document
-func (hf *HeaderFooter) applyHeader(doc *Document) error {
+func (hf *HeaderFooter) applyHeader(doc *renderer) error {
 	if err := defaults.Set(hf); err != nil {
 		return err
 	}
@@ -40,10 +40,10 @@ func (hf *HeaderFooter) applyHeader(doc *Document) error {
 			doc.pdf.SetRightMargin(BaseMargin)
 
 			// Parse Text as html (simple)
-			doc.pdf.SetFont(doc.Options.Font, "", hf.FontSize)
+			doc.pdf.SetFont(doc.opts.Font, "", hf.FontSize)
 			_, lineHt := doc.pdf.GetFontSize()
 			html := doc.pdf.HTMLBasicNew()
-			html.Write(lineHt, doc.encodeString(hf.Text))
+			html.Write(lineHt, doc.encode(hf.Text))
 
 			// Apply pagination
 			if !hf.Pagination {
@@ -53,7 +53,7 @@ func (hf *HeaderFooter) applyHeader(doc *Document) error {
 				doc.pdf.CellFormat(
 					10,
 					5,
-					doc.encodeString(fmt.Sprintf("Page %d/{nb}", doc.pdf.PageNo())),
+					doc.encode(fmt.Sprintf("Page %d/{nb}", doc.pdf.PageNo())),
 					"0",
 					0,
 					"R",
@@ -73,7 +73,7 @@ func (hf *HeaderFooter) applyHeader(doc *Document) error {
 }
 
 // applyFooter apply footer to document
-func (hf *HeaderFooter) applyFooter(doc *Document) error {
+func (hf *HeaderFooter) applyFooter(doc *renderer) error {
 	if err := defaults.Set(hf); err != nil {
 		return err
 	}
@@ -87,10 +87,10 @@ func (hf *HeaderFooter) applyFooter(doc *Document) error {
 			doc.pdf.SetY(287 - HeaderMarginTop)
 
 			// Parse Text as html (simple)
-			doc.pdf.SetFont(doc.Options.Font, "", hf.FontSize)
+			doc.pdf.SetFont(doc.opts.Font, "", hf.FontSize)
 			_, lineHt := doc.pdf.GetFontSize()
 			html := doc.pdf.HTMLBasicNew()
-			html.Write(lineHt, doc.encodeString(hf.Text))
+			html.Write(lineHt, doc.encode(hf.Text))
 
 			// Apply pagination
 			if hf.Pagination {
@@ -100,7 +100,7 @@ func (hf *HeaderFooter) applyFooter(doc *Document) error {
 				doc.pdf.CellFormat(
 					10,
 					5,
-					doc.encodeString(fmt.Sprintf("Page %d/{nb}", doc.pdf.PageNo())),
+					doc.encode(fmt.Sprintf("Page %d/{nb}", doc.pdf.PageNo())),
 					"0",
 					0,
 					"R",

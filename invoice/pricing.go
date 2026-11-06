@@ -1,4 +1,4 @@
-package generator
+package invoice
 
 import (
 	"errors"
@@ -127,3 +127,11 @@ func (t *Tax) getTax() (string, decimal.Decimal) {
 	}
 	return TaxTypePercent, t._percent
 }
+
+// Value returns the discount kind (DiscountTypeAmount or DiscountTypePercent)
+// and its parsed value; Prepare must have run.
+func (d *Discount) Value() (string, decimal.Decimal) { return d.getDiscount() }
+
+// Value returns the tax kind (TaxTypeAmount or TaxTypePercent) and its parsed
+// value; Prepare must have run.
+func (t *Tax) Value() (string, decimal.Decimal) { return t.getTax() }

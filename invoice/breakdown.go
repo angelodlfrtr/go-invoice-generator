@@ -1,4 +1,4 @@
-package generator
+package invoice
 
 import (
 	"sort"
@@ -73,10 +73,7 @@ var hundred = decimal.NewFromInt(100)
 // precision returns the currency precision used for rounding, clamped to
 // [0, 8] so the int32 conversion is safe.
 func (doc *Document) precision() int32 {
-	if doc.Options == nil {
-		return 2
-	}
-	p := doc.Options.CurrencyPrecision
+	p := doc.Currency.Precision
 	if p < 0 {
 		p = 0
 	}
@@ -89,7 +86,7 @@ func (doc *Document) precision() int32 {
 // Breakdown computes the document totals. Items must have been prepared by
 // Validate (called by Build) first.
 //
-// Amounts are rounded to Options.CurrencyPrecision at three points: each
+// Amounts are rounded to Currency.Precision at three points: each
 // item's net amount, each group's share of the document discount and each
 // group's tax. Totals are sums of those rounded parts, never rounded sums.
 func (doc *Document) Breakdown() *Breakdown {

@@ -1,23 +1,34 @@
 package generator
 
-// UnicodeTranslateFunc ...
+// UnicodeTranslateFunc converts a string before it is written to the PDF.
 type UnicodeTranslateFunc func(string) string
 
-// Options for Document
+// Options controls the rendering: currency formatting, labels, colours and
+// fonts. The currency precision comes from invoice.Document.Currency.
 type Options struct {
-	CurrencySymbol    string `default:"€ " json:"currency_symbol,omitempty"`
-	CurrencyPrecision int    `default:"2" json:"currency_precision,omitempty"`
-	CurrencyDecimal   string `default:"." json:"currency_decimal,omitempty"`
-	CurrencyThousand  string `default:" " json:"currency_thousand,omitempty"`
+	CurrencySymbol   string `default:"€ " json:"currency_symbol,omitempty"`
+	CurrencyDecimal  string `default:"." json:"currency_decimal,omitempty"`
+	CurrencyThousand string `default:" " json:"currency_thousand,omitempty"`
 
 	TextTypeInvoice      string `default:"INVOICE" json:"text_type_invoice,omitempty"`
 	TextTypeQuotation    string `default:"QUOTATION" json:"text_type_quotation,omitempty"`
 	TextTypeDeliveryNote string `default:"DELIVERY NOTE" json:"text_type_delivery_note,omitempty"`
+	TextTypeCreditNote   string `default:"CREDIT NOTE" json:"text_type_credit_note,omitempty"`
 
-	TextRefTitle         string `default:"Ref." json:"text_ref_title,omitempty"`
-	TextVersionTitle     string `default:"Version" json:"text_version_title,omitempty"`
-	TextDateTitle        string `default:"Date" json:"text_date_title,omitempty"`
-	TextPaymentTermTitle string `default:"Payment term" json:"text_payment_term_title,omitempty"`
+	TextRefTitle              string `default:"Ref." json:"text_ref_title,omitempty"`
+	TextVersionTitle          string `default:"Version" json:"text_version_title,omitempty"`
+	TextDateTitle             string `default:"Date" json:"text_date_title,omitempty"`
+	TextDueDateTitle          string `default:"Due date" json:"text_due_date_title,omitempty"`
+	TextPaymentTermTitle      string `default:"Payment term" json:"text_payment_term_title,omitempty"`
+	TextPaymentReferenceTitle string `default:"Payment ref." json:"text_payment_reference_title,omitempty"`
+	TextPrecedingInvoiceTitle string `default:"Refers to invoice" json:"text_preceding_invoice_title,omitempty"`
+	TextDeliveryDateTitle     string `default:"Delivery date" json:"text_delivery_date_title,omitempty"`
+	TextDeliveryPeriodTitle   string `default:"Period" json:"text_delivery_period_title,omitempty"`
+	TextDeliveredToTitle      string `default:"Delivered to" json:"text_delivered_to_title,omitempty"`
+
+	// Labels of the identifiers printed under each party's address.
+	TextContactVATID   string `default:"VAT" json:"text_contact_vat_id,omitempty"`
+	TextContactLegalID string `default:"Reg. no." json:"text_contact_legal_id,omitempty"`
 
 	TextItemsNameTitle     string `default:"Name" json:"text_items_name_title,omitempty"`
 	TextItemsUnitCostTitle string `default:"Unit price" json:"text_items_unit_cost_title,omitempty"`

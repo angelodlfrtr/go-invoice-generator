@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 	"github.com/shopspring/decimal"
+
+	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 )
 
 // French e-invoicing reform (AFNOR XP Z12-012, "Flux 2") rules. The checks
@@ -74,9 +75,13 @@ func frDateInRange(date string) bool {
 	return date == "" || strings.HasPrefix(date, "20")
 }
 
+func hasSIREN(c *invoice.Contact) bool {
+	return c != nil && c.LegalIDScheme == sirenScheme && sirenRe.MatchString(c.LegalID)
+}
+
 // validateFrenchRules runs after the generic build so it can inspect the
-// resolved data (normalised dates, countries, notes, VAT groups).
-func validateFrenchRules(doc *generator.Document, opts Options, profile Profile, d *ciiData, sellerCountry, buyerCountry string, t *totals) []error {
+// resolved data (normalised dates, countries, endpoints, notes, VAT groups).
+func validateFrenchRules(doc *invoice.Document, opts Options, profile Profile, d *ciiData, sellerCountry string, t *totals) []error {
 	var errs []error
 	fail := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format+": %w", append(args, ErrFrenchRules)...))
@@ -89,32 +94,30 @@ func validateFrenchRules(doc *generator.Document, opts Options, profile Profile,
 	if sellerCountry != "FR" {
 		fail("seller country must be FR, got %q", sellerCountry)
 	}
-	if opts.SellerLegalIDSchemeID != sirenScheme || !sirenRe.MatchString(opts.SellerLegalID) {
-		fail("BR-FR-10: seller needs a 9-digit SIREN in SellerLegalID with SellerLegalIDSchemeID %q", sirenScheme)
+	if !hasSIREN(doc.Company) {
+		fail("BR-FR-10: the company needs a 9-digit SIREN in LegalID with LegalIDScheme %q", sirenScheme)
 	}
 
 	flow := opts.frenchFlow()
 	if !frFlows[flow] {
 		fail("BR-FR-20: FrenchFlow %q must be one of B2B, B2BINT, B2C, OUTOFSCOPE, ARCHIVEONLY", flow)
 	}
-	typeCode := opts.typeCode()
-	hasBuyerSIREN := opts.BuyerLegalIDSchemeID == sirenScheme && sirenRe.MatchString(opts.BuyerLegalID)
+	typeCode := d.TypeCode
 	if flow == "B2B" {
-		if !hasBuyerSIREN {
-			fail("BR-FR-11: a B2B flow needs a 9-digit SIREN in BuyerLegalID with BuyerLegalIDSchemeID %q", sirenScheme)
+		if !hasSIREN(doc.Customer) {
+			fail("BR-FR-11: a B2B flow needs a 9-digit SIREN in the customer's LegalID with LegalIDScheme %q", sirenScheme)
 		}
 		if frSelfBilling[typeCode] {
-			if opts.SellerElectronicAddressSchemeID != frEndpointScheme || !strings.HasPrefix(opts.SellerElectronicAddress, opts.SellerLegalID) {
+			if d.Seller.ElectronicAddressSchemeID != frEndpointScheme || !strings.HasPrefix(d.Seller.ElectronicAddress, doc.Company.LegalID) {
 				fail("BR-FR-22: on a self-billed document the seller electronic address must start with the seller SIREN and use scheme %q", frEndpointScheme)
 			}
-		} else if hasBuyerSIREN && (opts.BuyerElectronicAddressSchemeID != frEndpointScheme || !strings.HasPrefix(opts.BuyerElectronicAddress, opts.BuyerLegalID)) {
+		} else if hasSIREN(doc.Customer) && (d.Buyer.ElectronicAddressSchemeID != frEndpointScheme || !strings.HasPrefix(d.Buyer.ElectronicAddress, doc.Customer.LegalID)) {
 			fail("BR-FR-21: the buyer electronic address must start with the buyer SIREN and use scheme %q", frEndpointScheme)
 		}
 	}
-	_ = buyerCountry
 
 	// Electronic addresses are mandatory on both sides (BR-FR-12, BR-FR-13).
-	for name, addr := range map[string]string{"seller": opts.SellerElectronicAddress, "buyer": opts.BuyerElectronicAddress} {
+	for name, addr := range map[string]string{"seller": d.Seller.ElectronicAddress, "buyer": d.Buyer.ElectronicAddress} {
 		switch {
 		case addr == "":
 			fail("BR-FR-12/13: %s electronic address is required", name)
@@ -145,11 +148,11 @@ func validateFrenchRules(doc *generator.Document, opts Options, profile Profile,
 
 	// Preceding invoice.
 	if frCreditNotes[typeCode] || frCorrectives[typeCode] {
-		if opts.PrecedingInvoiceReference == "" || d.PrecedingInvoiceDate == "" {
-			fail("BR-FR-CO-04/05: document type %s needs PrecedingInvoiceReference and PrecedingInvoiceDate", typeCode)
+		if d.PrecedingInvoiceReference == "" || d.PrecedingInvoiceDate == "" {
+			fail("BR-FR-CO-04/05: document type %s needs a PrecedingInvoice with its date", typeCode)
 		}
 	}
-	if ref := opts.PrecedingInvoiceReference; ref != "" {
+	if ref := d.PrecedingInvoiceReference; ref != "" {
 		if len(ref) > 35 {
 			fail("BR-FR-01: preceding invoice reference %q exceeds 35 characters", ref)
 		}

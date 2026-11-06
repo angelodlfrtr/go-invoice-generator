@@ -1,21 +1,31 @@
-package generator
+package invoice
 
 import (
 	"github.com/shopspring/decimal"
 )
 
-// Item represents a product or service line on a document
+// Item is a line of the document.
 type Item struct {
-	Name        string    `json:"name,omitempty" validate:"required"`
-	Description string    `json:"description,omitempty"`
-	UnitCost    string    `json:"unit_cost,omitempty"`
-	Quantity    string    `json:"quantity,omitempty"`
-	Tax         *Tax      `json:"tax,omitempty"`
-	Discount    *Discount `json:"discount,omitempty"`
+	Name        string `json:"name,omitempty" validate:"required"`
+	Description string `json:"description,omitempty"`
+	// UnitCost and Quantity are decimal strings to avoid float rounding.
+	UnitCost string `json:"unit_cost,omitempty"`
+	Quantity string `json:"quantity,omitempty"`
+	// Unit is the UN/ECE Recommendation 20 unit code, e.g. "C62" piece,
+	// "HUR" hour, "DAY" day, "KGM" kilogram. Exporters default it when empty.
+	Unit     string    `json:"unit,omitempty"`
+	Tax      *Tax      `json:"tax,omitempty"`
+	Discount *Discount `json:"discount,omitempty"`
 
 	_unitCost decimal.Decimal
 	_quantity decimal.Decimal
 }
+
+// UnitCostDecimal returns the parsed unit cost; Prepare must have run.
+func (i *Item) UnitCostDecimal() decimal.Decimal { return i._unitCost }
+
+// QuantityDecimal returns the parsed quantity; Prepare must have run.
+func (i *Item) QuantityDecimal() decimal.Decimal { return i._quantity }
 
 // Prepare parses UnitCost and Quantity strings into decimal values
 func (i *Item) Prepare() error {

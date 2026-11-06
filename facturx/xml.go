@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
+	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 	"github.com/shopspring/decimal"
 )
 
@@ -74,7 +74,7 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				</ram:NetPriceProductTradePrice>
 			</ram:SpecifiedLineTradeAgreement>
 			<ram:SpecifiedLineTradeDelivery>
-				<ram:BilledQuantity unitCode="{{xe $.UnitCode}}">{{.Quantity}}</ram:BilledQuantity>
+				<ram:BilledQuantity unitCode="{{xe .UnitCode}}">{{.Quantity}}</ram:BilledQuantity>
 			</ram:SpecifiedLineTradeDelivery>
 			<ram:SpecifiedLineTradeSettlement>
 				<ram:ApplicableTradeTax>
@@ -336,6 +336,7 @@ type ciiLineItem struct {
 	UnitDiscount    string // per-unit allowance, set with GrossUnitPrice
 	NetUnitPrice    string
 	Quantity        string
+	UnitCode        string
 	TaxCategoryCode string
 	HasTaxRate      bool
 	TaxPercent      string
@@ -376,7 +377,6 @@ type ciiData struct {
 	TaxBasisTotalAmount       string
 	TaxTotalAmount            string
 	GrandTotalAmount          string
-	UnitCode                  string
 	LineItems                 []ciiLineItem
 }
 
@@ -393,11 +393,11 @@ func xmlEsc(s string) string {
 }
 
 // BuildXML generates the CII XML bytes for the given document and options.
-// doc.Validate() (called by doc.Build()) must have run before calling this.
+// doc.Validate() (called by the generator's Build) must have run before.
 //
 // The document and options are validated against the EN 16931 business rules
 // that can be checked up front; see the Err* sentinels for what is rejected.
-func BuildXML(doc *generator.Document, opts Options) ([]byte, error) {
+func BuildXML(doc *invoice.Document, opts Options) ([]byte, error) {
 	data, err := buildCIIData(doc, opts)
 	if err != nil {
 		return nil, err
@@ -411,8 +411,7 @@ func BuildXML(doc *generator.Document, opts Options) ([]byte, error) {
 	return []byte(strings.TrimSpace(buf.String())), nil
 }
 
-func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
-	opts = applyFrenchDefaults(opts)
+func buildCIIData(doc *invoice.Document, opts Options) (*ciiData, error) {
 	profile := opts.profile()
 	minimum := profile == ProfileMinimum
 	basicWLPlus := !minimum
@@ -431,7 +430,7 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	issueDate, err := formatDate("document date", doc.Date)
 	fail(err)
 
-	currency := strings.ToUpper(strings.TrimSpace(opts.currencyCode()))
+	currency := strings.ToUpper(strings.TrimSpace(doc.Currency.Code))
 	if !currencyCodeRe.MatchString(currency) {
 		fail(fmt.Errorf("currency %q: %w", currency, ErrInvalidCurrencyCode))
 	}
@@ -439,17 +438,16 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	d := &ciiData{
 		GuidelineID:            profile.guidelineID(),
 		BusinessProcessID:      opts.BusinessProcessID,
-		TypeCode:               opts.typeCode(),
+		TypeCode:               opts.typeCode(doc),
 		ID:                     doc.Ref,
 		IssueDate:              issueDate,
-		BuyerReference:         opts.BuyerReference,
-		PurchaseOrderReference: opts.PurchaseOrderReference,
+		BuyerReference:         doc.ClientRef,
+		PurchaseOrderReference: doc.PurchaseOrderRef,
 		CurrencyCode:           currency,
-		UnitCode:               opts.itemDefaultUnitCode(),
 	}
 
 	if basicWLPlus {
-		d.Notes = append(d.Notes, opts.notes(doc)...)
+		d.Notes = append(d.Notes, doc.Notes...)
 		if opts.FrenchRules {
 			d.Notes = append(d.Notes, Note{Content: opts.frenchFlow(), SubjectCode: "BAR"})
 		}
@@ -457,68 +455,44 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 
 	// ---- Parties ----
 
-	if opts.SellerTaxID == "" && opts.SellerLegalID == "" {
+	if doc.Company.VATID == "" && doc.Company.LegalID == "" {
 		fail(ErrMissingSellerID)
 	}
 
-	sellerCountry, err := normalizeCountry("seller country", opts.sellerCountryCode(doc), true)
+	sellerCountry, err := normalizeCountry("seller country", doc.Company.Address.ISOCountry(), true)
 	fail(err)
-	d.Seller = ciiParty{
-		Name:            doc.Company.Name,
-		LegalID:         opts.SellerLegalID,
-		LegalIDSchemeID: opts.SellerLegalIDSchemeID,
-		TaxID:           opts.SellerTaxID,
-		Address:         buildAddress(doc.Company.Address, sellerCountry, minimum),
-	}
-	if basicWLPlus && opts.SellerElectronicAddress != "" {
-		d.Seller.ElectronicAddress = opts.SellerElectronicAddress
-		d.Seller.ElectronicAddressSchemeID = opts.sellerElectronicAddressSchemeID()
-	}
-	if en16931Plus && (opts.SellerContactName != "" || opts.SellerContactPhone != "" || opts.SellerContactEmail != "") {
-		d.Seller.Contact = &ciiContact{
-			Name:  opts.SellerContactName,
-			Phone: opts.SellerContactPhone,
-			Email: opts.SellerContactEmail,
-		}
-	}
+	d.Seller = buildParty(doc.Company, sellerCountry, opts, minimum, basicWLPlus, en16931Plus)
 
 	// Buyer address is optional in MINIMUM, mandatory above (BR-10, BR-11).
-	buyerCountry, err := normalizeCountry("buyer country", opts.buyerCountryCode(doc), basicWLPlus)
+	buyerCountry, err := normalizeCountry("buyer country", doc.Customer.Address.ISOCountry(), basicWLPlus)
 	fail(err)
-	d.Buyer = ciiParty{
-		Name:            doc.Customer.Name,
-		LegalID:         opts.BuyerLegalID,
-		LegalIDSchemeID: opts.BuyerLegalIDSchemeID,
-		Address:         buildAddress(doc.Customer.Address, buyerCountry, minimum),
-	}
-	if basicWLPlus {
-		d.Buyer.TaxID = opts.BuyerTaxID
-		if opts.BuyerElectronicAddress != "" {
-			d.Buyer.ElectronicAddress = opts.BuyerElectronicAddress
-			d.Buyer.ElectronicAddressSchemeID = opts.buyerElectronicAddressSchemeID()
-		}
+	d.Buyer = buildParty(doc.Customer, buyerCountry, opts, minimum, basicWLPlus, false)
+	if !basicWLPlus {
+		d.Buyer.TaxID = ""
 	}
 
 	// ---- Delivery, period, payment (BASIC-WL and above) ----
 
 	if basicWLPlus {
-		d.DeliveryDate, err = optionalDate("delivery date", opts.DeliveryDate)
-		fail(err)
+		if del := doc.Delivery; del != nil {
+			d.DeliveryDate, err = optionalDate("delivery date", del.Date)
+			fail(err)
 
-		if (opts.InvoicingPeriodStart == "") != (opts.InvoicingPeriodEnd == "") {
-			fail(ErrInvalidPeriod)
-		}
-		d.PeriodStart, err = optionalDate("invoicing period start", opts.InvoicingPeriodStart)
-		fail(err)
-		d.PeriodEnd, err = optionalDate("invoicing period end", opts.InvoicingPeriodEnd)
-		fail(err)
+			if (del.PeriodStart == "") != (del.PeriodEnd == "") {
+				fail(ErrInvalidPeriod)
+			}
+			d.PeriodStart, err = optionalDate("invoicing period start", del.PeriodStart)
+			fail(err)
+			d.PeriodEnd, err = optionalDate("invoicing period end", del.PeriodEnd)
+			fail(err)
 
-		if opts.hasShipTo() {
-			shipToCountry, cerr := normalizeCountry("ship-to country", opts.shipToCountryCode(), true)
-			fail(cerr)
-			d.ShipTo = &ciiParty{
-				Name:    opts.ShipToName,
-				Address: buildAddress(opts.ShipToAddress, shipToCountry, false),
+			if del.ShipTo != nil {
+				shipToCountry, cerr := normalizeCountry("ship-to country", del.ShipTo.Address.ISOCountry(), true)
+				fail(cerr)
+				d.ShipTo = &ciiParty{
+					Name:    del.ShipTo.Name,
+					Address: buildAddress(del.ShipTo.Address, shipToCountry, false),
+				}
 			}
 		}
 
@@ -542,25 +516,25 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 			}
 		}
 
-		d.PrecedingInvoiceReference = opts.PrecedingInvoiceReference
-		d.PrecedingInvoiceDate, err = optionalDate("preceding invoice date", opts.PrecedingInvoiceDate)
-		fail(err)
-
-		d.PaymentReference = opts.PaymentReference
-		d.PaymentMeansCode = opts.paymentMeansCode()
-		d.PaymentIBAN = opts.PaymentIBAN
-		if en16931Plus {
-			d.PaymentBIC = opts.PaymentBIC
+		if ref := doc.PrecedingInvoice; ref != nil && ref.Ref != "" {
+			d.PrecedingInvoiceReference = ref.Ref
+			d.PrecedingInvoiceDate, err = optionalDate("preceding invoice date", ref.Date)
+			fail(err)
 		}
-		d.PaymentTermsDescription = opts.PaymentTermsDescription
 
-		d.PaymentDueDate, err = optionalDate("payment due date", opts.PaymentDueDate)
-		fail(err)
-		if d.PaymentDueDate == "" && doc.PaymentTerm != "" {
-			// doc.PaymentTerm is free text on the PDF; use it only when it is a date.
-			if due, derr := formatDate("payment term", doc.PaymentTerm); derr == nil {
-				d.PaymentDueDate = due
+		if p := doc.Payment; p != nil {
+			d.PaymentReference = p.Reference
+			d.PaymentMeansCode = paymentMeansCode(p)
+			d.PaymentIBAN = p.IBAN
+			if en16931Plus {
+				d.PaymentBIC = p.BIC
 			}
+		}
+
+		d.PaymentTermsDescription = doc.PaymentTermsText()
+		if due, ok := doc.EffectiveDueDate(); ok {
+			d.PaymentDueDate, err = formatDate("payment due date", due)
+			fail(err)
 		}
 	}
 
@@ -570,7 +544,7 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	fail(err)
 
 	if opts.FrenchRules {
-		errs = append(errs, validateFrenchRules(doc, opts, profile, d, sellerCountry, buyerCountry, totals)...)
+		errs = append(errs, validateFrenchRules(doc, opts, profile, d, sellerCountry, totals)...)
 	}
 
 	if len(errs) > 0 {
@@ -617,14 +591,34 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	}
 
 	if basicPlus {
-		d.LineItems = buildLineItems(doc, totals.lines, en16931Plus)
+		d.LineItems = buildLineItems(doc, opts, totals.lines, en16931Plus)
 	}
 
 	return d, nil
 }
 
-// buildAddress maps a generator address. MINIMUM only carries the country.
-func buildAddress(a *generator.Address, country string, minimum bool) *ciiAddress {
+// buildParty maps a contact. MINIMUM carries name, legal ID, country and VAT
+// ID; BASIC-WL adds the address and electronic address; EN 16931 adds the
+// contact person (seller only).
+func buildParty(c *invoice.Contact, country string, opts Options, minimum, basicWLPlus, withContact bool) ciiParty {
+	p := ciiParty{
+		Name:            c.Name,
+		LegalID:         c.LegalID,
+		LegalIDSchemeID: c.LegalIDScheme,
+		TaxID:           c.VATID,
+		Address:         buildAddress(c.Address, country, minimum),
+	}
+	if basicWLPlus {
+		p.ElectronicAddress, p.ElectronicAddressSchemeID = opts.endpoint(c)
+	}
+	if withContact && (c.ContactName != "" || c.ContactPhone != "" || c.ContactEmail != "") {
+		p.Contact = &ciiContact{Name: c.ContactName, Phone: c.ContactPhone, Email: c.ContactEmail}
+	}
+	return p
+}
+
+// buildAddress maps an address. MINIMUM only carries the country.
+func buildAddress(a *invoice.Address, country string, minimum bool) *ciiAddress {
 	if a == nil && country == "" {
 		return nil
 	}
@@ -645,7 +639,7 @@ func buildAddress(a *generator.Address, country string, minimum bool) *ciiAddres
 
 // ---- Monetary computation ----
 
-// taxGroup is one VAT breakdown line: the generator groups that share an
+// taxGroup is one VAT breakdown line: the invoice tax groups that share an
 // effective VAT category and rate once option defaults apply (BR-CO-18).
 type taxGroup struct {
 	category            string
@@ -675,17 +669,17 @@ type totals struct {
 	grand          decimal.Decimal
 }
 
-// computeTotals maps the generator's Breakdown onto the VAT breakdown. Every
+// computeTotals maps the document's Breakdown onto the VAT breakdown. Every
 // amount comes from doc.Breakdown(), the same figures the PDF prints, so the
 // XML and the PDF always agree and the EN 16931 identities (BR-CO-10, 11, 13,
 // 14, 15) hold by construction.
 //
-// Generator groups are keyed by the raw Tax.Category. Several of them can map
+// Breakdown groups are keyed by the raw Tax.Category. Several of them can map
 // to one effective category once defaults apply; their rounded amounts are
 // then summed, which BR-CO-17 tolerates.
-func computeTotals(doc *generator.Document, opts Options, profile Profile) (*totals, error) {
-	if doc.Options != nil && doc.Options.CurrencyPrecision > 2 {
-		return nil, fmt.Errorf("currency precision %d: %w", doc.Options.CurrencyPrecision, ErrUnsupportedPrecision)
+func computeTotals(doc *invoice.Document, opts Options, profile Profile) (*totals, error) {
+	if doc.Currency.Precision > 2 {
+		return nil, fmt.Errorf("currency precision %d: %w", doc.Currency.Precision, ErrUnsupportedPrecision)
 	}
 
 	bd := doc.Breakdown()
@@ -743,8 +737,8 @@ func computeTotals(doc *generator.Document, opts Options, profile Profile) (*tot
 	return t, nil
 }
 
-// effectiveGroup applies the option defaults to a generator tax group.
-func effectiveGroup(g *generator.TaxGroup, opts Options) *taxGroup {
+// effectiveGroup applies the option defaults to an invoice tax group.
+func effectiveGroup(g *invoice.TaxGroup, opts Options) *taxGroup {
 	eg := &taxGroup{
 		percent:   g.Percent,
 		hasRate:   true,
@@ -785,17 +779,18 @@ func mergeReasons(dst, src *taxGroup) {
 	}
 }
 
-func buildLineItems(doc *generator.Document, lines []lineAmounts, withDescription bool) []ciiLineItem {
+func buildLineItems(doc *invoice.Document, opts Options, lines []lineAmounts, withDescription bool) []ciiLineItem {
 	items := make([]ciiLineItem, 0, len(doc.Items))
 	for i, item := range doc.Items {
 		la := lines[i]
-		gross, _ := decimal.NewFromString(item.UnitCost)
-		qty, _ := decimal.NewFromString(item.Quantity)
+		gross := item.UnitCostDecimal()
+		qty := item.QuantityDecimal()
 
 		li := ciiLineItem{
 			LineID:          fmt.Sprintf("%d", i+1),
 			Name:            item.Name,
 			Quantity:        qty.String(),
+			UnitCode:        opts.itemUnitCode(item),
 			TaxCategoryCode: la.tax.category,
 			HasTaxRate:      la.tax.hasRate,
 			TaxPercent:      la.tax.percent.StringFixed(2),

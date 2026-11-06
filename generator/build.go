@@ -3,469 +3,426 @@ package generator
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
 	"codeberg.org/go-pdf/fpdf"
+	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
+
+	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 )
 
-// Build pdf document from data provided
-func (doc *Document) Build() (*fpdf.Fpdf, error) {
-	// Validate document data
-	if err := doc.Validate(); err != nil {
-		return nil, err
+// renderer draws one invoice.Document on one fpdf instance.
+type renderer struct {
+	pdf  *fpdf.Fpdf
+	ac   accounting.Accounting
+	opts *Options
+	doc  *invoice.Document
+	gen  *Generator
+}
+
+func (r *renderer) encode(s string) string { return r.gen.translate(s) }
+
+func (r *renderer) money(d decimal.Decimal) string { return r.ac.FormatMoneyDecimal(d) }
+
+func (r *renderer) setTextColor(c []int) { r.pdf.SetTextColor(c[0], c[1], c[2]) }
+
+func (r *renderer) setFillColor(c []int) { r.pdf.SetFillColor(c[0], c[1], c[2]) }
+
+func (r *renderer) typeAsString() string {
+	switch r.doc.Type {
+	case invoice.Invoice:
+		return r.opts.TextTypeInvoice
+	case invoice.Quotation:
+		return r.opts.TextTypeQuotation
+	case invoice.CreditNote:
+		return r.opts.TextTypeCreditNote
+	default:
+		return r.opts.TextTypeDeliveryNote
+	}
+}
+
+// probe returns a renderer on a throwaway PDF positioned like r, used to
+// detect page breaks before drawing for real.
+func (r *renderer) probe() *renderer {
+	p := &renderer{pdf: newPDF(), ac: r.ac, opts: r.opts, doc: r.doc, gen: r.gen}
+	for i := 0; i < r.pdf.PageCount(); i++ {
+		p.pdf.AddPage()
+	}
+	p.pdf.SetPage(r.pdf.PageNo())
+	p.pdf.SetXY(r.pdf.GetXY())
+	return p
+}
+
+// pageTxn dry-runs cb on a probe to detect page breaks, then executes for
+// real. On a break, AddPage is called and onBreak (if any) runs first, e.g. to
+// redraw table headers.
+func (r *renderer) pageTxn(cb func(*renderer), onBreak ...func(*renderer)) {
+	p := r.probe()
+	currentPage := p.pdf.PageNo()
+	cb(p)
+
+	if p.pdf.PageNo() > currentPage || p.pdf.GetY() > MaxPageHeight {
+		r.pdf.AddPage()
+		if len(onBreak) > 0 && onBreak[0] != nil {
+			onBreak[0](r)
+		}
 	}
 
-	// Build base doc
-	doc.pdf.SetMargins(BaseMargin, BaseMarginTop, BaseMargin)
-	doc.pdf.SetXY(10, 10)
-	doc.pdf.SetTextColor(
-		doc.Options.BaseTextColor[0],
-		doc.Options.BaseTextColor[1],
-		doc.Options.BaseTextColor[2],
-	)
+	cb(r)
+}
 
-	// Set header
-	if doc.Header != nil {
-		if err := doc.Header.applyHeader(doc); err != nil {
+func (r *renderer) build() (*fpdf.Fpdf, error) {
+	r.pdf.SetMargins(BaseMargin, BaseMarginTop, BaseMargin)
+	r.pdf.SetXY(10, 10)
+	r.setTextColor(r.opts.BaseTextColor)
+
+	if r.gen.Header != nil {
+		if err := r.gen.Header.applyHeader(r); err != nil {
+			return nil, err
+		}
+	}
+	if r.gen.Footer != nil {
+		if err := r.gen.Footer.applyFooter(r); err != nil {
 			return nil, err
 		}
 	}
 
-	// Set footer
-	if doc.Footer != nil {
-		if err := doc.Footer.applyFooter(doc); err != nil {
-			return nil, err
-		}
-	}
+	r.pdf.AddPage()
+	r.pdf.SetFont(r.opts.Font, "", 12)
 
-	// Add first page
-	doc.pdf.AddPage()
+	r.appendTitle()
+	r.appendMetas()
 
-	// Load font
-	doc.pdf.SetFont(doc.Options.Font, "", 12)
-
-	// Appenf document title
-	doc.appendTitle()
-
-	// Appenf document metas (ref & version)
-	doc.appendMetas()
-
-	// Append company contact to doc
-	companyBottom := doc.Company.appendCompanyContactToDoc(doc)
-
-	// Append customer contact to doc
-	customerBottom := doc.Customer.appendCustomerContactToDoc(doc)
-
+	x, y, _, _ := r.pdf.GetMargins()
+	companyBottom := r.appendContact(r.doc.Company, x, y)
+	customerBottom := r.appendContact(r.doc.Customer, 130, BaseMarginTop+25)
 	if customerBottom > companyBottom {
-		doc.pdf.SetXY(10, customerBottom)
+		r.pdf.SetXY(10, customerBottom)
 	} else {
-		doc.pdf.SetXY(10, companyBottom)
+		r.pdf.SetXY(10, companyBottom)
 	}
 
-	// Append description
-	doc.appendDescription()
-
-	// Append items
-	doc.appendItems()
+	r.appendDescription()
+	r.appendDelivery()
+	r.appendItems()
 
 	// Total and payment term share the right column and must stay together.
-	doc.pageTxn(func(d *Document) {
+	r.pageTxn(func(p *renderer) {
 		// Notes resets Y after rendering (left column, side-by-side with total).
-		d.appendNotes()
-
-		d.appendTotal()
-		d.appendPaymentTerm()
+		p.appendNotes()
+		p.appendTotal()
+		p.appendPaymentTerm()
 	})
 
-	return doc.pdf, nil
+	return r.pdf, nil
 }
 
-// appendTitle to document
-func (doc *Document) appendTitle() {
-	title := doc.typeAsString()
-
-	// Set x y
-	doc.pdf.SetXY(120, BaseMarginTop)
-
-	// Draw rect
-	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
-	doc.pdf.Rect(120, BaseMarginTop, 80, 10, "F")
-
-	// Draw text
-	doc.pdf.SetFont(doc.Options.Font, "", 14)
-	doc.pdf.CellFormat(80, 10, doc.encodeString(title), "0", 0, "C", false, 0, "")
+func (r *renderer) appendTitle() {
+	r.pdf.SetXY(120, BaseMarginTop)
+	r.setFillColor(r.opts.DarkBgColor)
+	r.pdf.Rect(120, BaseMarginTop, 80, 10, "F")
+	r.pdf.SetFont(r.opts.Font, "", 14)
+	r.pdf.CellFormat(80, 10, r.encode(r.typeAsString()), "0", 0, "C", false, 0, "")
 }
 
-// appendMetas to document
-func (doc *Document) appendMetas() {
-	// Append ref
-	refString := fmt.Sprintf("%s: %s", doc.Options.TextRefTitle, doc.Ref)
+func (r *renderer) appendMetas() {
+	r.pdf.SetFont(r.opts.Font, "", 8)
 
-	doc.pdf.SetXY(120, BaseMarginTop+11)
-	doc.pdf.SetFont(doc.Options.Font, "", 8)
-	doc.pdf.CellFormat(80, 4, doc.encodeString(refString), "0", 0, "R", false, 0, "")
+	r.pdf.SetXY(120, BaseMarginTop+11)
+	r.pdf.CellFormat(80, 4, r.encode(fmt.Sprintf("%s: %s", r.opts.TextRefTitle, r.doc.Ref)), "0", 0, "R", false, 0, "")
 
-	// Append version
-	if len(doc.Version) > 0 {
-		versionString := fmt.Sprintf("%s: %s", doc.Options.TextVersionTitle, doc.Version)
-		doc.pdf.SetXY(120, BaseMarginTop+15)
-		doc.pdf.SetFont(doc.Options.Font, "", 8)
-		doc.pdf.CellFormat(80, 4, doc.encodeString(versionString), "0", 0, "R", false, 0, "")
+	if len(r.doc.Version) > 0 {
+		r.pdf.SetXY(120, BaseMarginTop+15)
+		r.pdf.CellFormat(80, 4, r.encode(fmt.Sprintf("%s: %s", r.opts.TextVersionTitle, r.doc.Version)), "0", 0, "R", false, 0, "")
 	}
 
-	// Append date
 	date := time.Now().Format("02/01/2006")
-	if len(doc.Date) > 0 {
-		date = doc.Date
+	if len(r.doc.Date) > 0 {
+		date = r.doc.Date
 	}
-	dateString := fmt.Sprintf("%s: %s", doc.Options.TextDateTitle, date)
-	doc.pdf.SetXY(120, BaseMarginTop+19)
-	doc.pdf.SetFont(doc.Options.Font, "", 8)
-	doc.pdf.CellFormat(80, 4, doc.encodeString(dateString), "0", 0, "R", false, 0, "")
+	r.pdf.SetXY(120, BaseMarginTop+19)
+	r.pdf.CellFormat(80, 4, r.encode(fmt.Sprintf("%s: %s", r.opts.TextDateTitle, date)), "0", 0, "R", false, 0, "")
 }
 
-// appendDescription to document
-func (doc *Document) appendDescription() {
-	if len(doc.Description) > 0 {
-		doc.pdf.SetY(doc.pdf.GetY() + 10)
-		doc.pdf.SetFont(doc.Options.Font, "", 10)
-		doc.pdf.MultiCell(190, 5, doc.encodeString(doc.Description), "B", "L", false)
+func (r *renderer) appendDescription() {
+	if ref := r.doc.PrecedingInvoice; ref != nil && ref.Ref != "" {
+		text := fmt.Sprintf("%s: %s", r.opts.TextPrecedingInvoiceTitle, ref.Ref)
+		if ref.Date != "" {
+			text += fmt.Sprintf(" (%s)", ref.Date)
+		}
+		r.pdf.SetY(r.pdf.GetY() + 10)
+		r.pdf.SetFont(r.opts.Font, "", 10)
+		r.pdf.MultiCell(190, 5, r.encode(text), "", "L", false)
+		if len(r.doc.Description) > 0 {
+			r.pdf.SetY(r.pdf.GetY() - 10)
+		}
+	}
+	if len(r.doc.Description) > 0 {
+		r.pdf.SetY(r.pdf.GetY() + 10)
+		r.pdf.SetFont(r.opts.Font, "", 10)
+		r.pdf.MultiCell(190, 5, r.encode(r.doc.Description), "B", "L", false)
 	}
 }
 
-// drawsTableTitles in document
-func (doc *Document) drawsTableTitles() {
-	// Draw table titles
-	doc.pdf.SetX(10)
-	doc.pdf.SetY(doc.pdf.GetY() + 5)
-	doc.pdf.SetFont(doc.Options.BoldFont, "B", 8)
-
-	// Draw rec
-	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
-	doc.pdf.Rect(10, doc.pdf.GetY(), 190, 6, "F")
-
-	// Name
-	doc.pdf.SetX(ItemColNameOffset)
-	doc.pdf.CellFormat(
-		ItemColUnitPriceOffset-ItemColNameOffset,
-		6,
-		doc.encodeString(doc.Options.TextItemsNameTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
-
-	// Unit price
-	doc.pdf.SetX(ItemColUnitPriceOffset)
-	doc.pdf.CellFormat(
-		ItemColQuantityOffset-ItemColUnitPriceOffset,
-		6,
-		doc.encodeString(doc.Options.TextItemsUnitCostTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
-
-	// Quantity
-	doc.pdf.SetX(ItemColQuantityOffset)
-	doc.pdf.CellFormat(
-		ItemColTaxOffset-ItemColQuantityOffset,
-		6,
-		doc.encodeString(doc.Options.TextItemsQuantityTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
-
-	// Total HT
-	doc.pdf.SetX(ItemColTotalHTOffset)
-	doc.pdf.CellFormat(
-		ItemColTaxOffset-ItemColTotalHTOffset,
-		6,
-		doc.encodeString(doc.Options.TextItemsTotalHTTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
-
-	// Tax
-	doc.pdf.SetX(ItemColTaxOffset)
-	doc.pdf.CellFormat(
-		ItemColDiscountOffset-ItemColTaxOffset,
-		6,
-		doc.encodeString(doc.Options.TextItemsTaxTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
-
-	// Discount
-	doc.pdf.SetX(ItemColDiscountOffset)
-	doc.pdf.CellFormat(
-		ItemColTotalTTCOffset-ItemColDiscountOffset,
-		6,
-		doc.encodeString(doc.Options.TextItemsDiscountTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
-
-	// TOTAL TTC
-	doc.pdf.SetX(ItemColTotalTTCOffset)
-	doc.pdf.CellFormat(
-		190-ItemColTotalTTCOffset,
-		6,
-		doc.encodeString(doc.Options.TextItemsTotalTTCTitle),
-		"0",
-		0,
-		"",
-		false,
-		0,
-		"",
-	)
+// appendDelivery prints the delivery date, period and deliver-to address.
+func (r *renderer) appendDelivery() {
+	d := r.doc.Delivery
+	if d == nil {
+		return
+	}
+	var lines []string
+	if d.Date != "" {
+		lines = append(lines, fmt.Sprintf("%s: %s", r.opts.TextDeliveryDateTitle, d.Date))
+	}
+	if d.PeriodStart != "" || d.PeriodEnd != "" {
+		lines = append(lines, fmt.Sprintf("%s: %s - %s", r.opts.TextDeliveryPeriodTitle, d.PeriodStart, d.PeriodEnd))
+	}
+	if d.ShipTo != nil {
+		parts := []string{}
+		if d.ShipTo.Name != "" {
+			parts = append(parts, d.ShipTo.Name)
+		}
+		if d.ShipTo.Address != nil {
+			parts = append(parts, strings.ReplaceAll(d.ShipTo.Address.ToString(), "\n", ", "))
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", r.opts.TextDeliveredToTitle, strings.Join(parts, ", ")))
+	}
+	if len(lines) == 0 {
+		return
+	}
+	r.pdf.SetY(r.pdf.GetY() + 5)
+	r.pdf.SetFont(r.opts.Font, "", BaseTextFontSize)
+	r.setTextColor(r.opts.GreyTextColor)
+	for _, line := range lines {
+		r.pdf.SetX(BaseMargin)
+		r.pdf.MultiCell(190, 4, r.encode(line), "", "L", false)
+	}
+	r.setTextColor(r.opts.BaseTextColor)
 }
 
-// appendItems to document
-func (doc *Document) appendItems() {
-	doc.drawsTableTitles()
+func (r *renderer) drawTableTitles() {
+	r.pdf.SetX(10)
+	r.pdf.SetY(r.pdf.GetY() + 5)
+	r.pdf.SetFont(r.opts.BoldFont, "B", 8)
 
-	doc.pdf.SetX(10)
-	doc.pdf.SetY(doc.pdf.GetY() + 8)
-	doc.pdf.SetFont(doc.Options.Font, "", 8)
+	r.setFillColor(r.opts.GreyBgColor)
+	r.pdf.Rect(10, r.pdf.GetY(), 190, 6, "F")
 
-	for _, item := range doc.Items {
-		doc.pageTxn(func(d *Document) {
-			item.appendColTo(d)
-		}, func(d *Document) {
-			d.drawsTableTitles()
-			d.pdf.SetFont(d.Options.Font, "", 8)
-			d.pdf.SetX(10)
-			d.pdf.SetY(d.pdf.GetY() + 8)
+	cols := []struct {
+		x, w  float64
+		title string
+	}{
+		{ItemColNameOffset, ItemColUnitPriceOffset - ItemColNameOffset, r.opts.TextItemsNameTitle},
+		{ItemColUnitPriceOffset, ItemColQuantityOffset - ItemColUnitPriceOffset, r.opts.TextItemsUnitCostTitle},
+		{ItemColQuantityOffset, ItemColTaxOffset - ItemColQuantityOffset, r.opts.TextItemsQuantityTitle},
+		{ItemColTotalHTOffset, ItemColTaxOffset - ItemColTotalHTOffset, r.opts.TextItemsTotalHTTitle},
+		{ItemColTaxOffset, ItemColDiscountOffset - ItemColTaxOffset, r.opts.TextItemsTaxTitle},
+		{ItemColDiscountOffset, ItemColTotalTTCOffset - ItemColDiscountOffset, r.opts.TextItemsDiscountTitle},
+		{ItemColTotalTTCOffset, 190 - ItemColTotalTTCOffset, r.opts.TextItemsTotalTTCTitle},
+	}
+	for _, c := range cols {
+		r.pdf.SetX(c.x)
+		r.pdf.CellFormat(c.w, 6, r.encode(c.title), "0", 0, "", false, 0, "")
+	}
+}
+
+func (r *renderer) appendItems() {
+	r.drawTableTitles()
+
+	r.pdf.SetX(10)
+	r.pdf.SetY(r.pdf.GetY() + 8)
+	r.pdf.SetFont(r.opts.Font, "", 8)
+
+	for _, item := range r.doc.Items {
+		r.pageTxn(func(p *renderer) {
+			p.appendItem(item)
+		}, func(p *renderer) {
+			p.drawTableTitles()
+			p.pdf.SetFont(p.opts.Font, "", 8)
+			p.pdf.SetX(10)
+			p.pdf.SetY(p.pdf.GetY() + 8)
 		})
 
 		// Gray separator line at the bottom of the item row
-		doc.pdf.SetY(doc.pdf.GetY() + 3)
-		lineY := doc.pdf.GetY()
-		doc.pdf.SetDrawColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
-		doc.pdf.Line(10, lineY, 200, lineY)
-		doc.pdf.SetDrawColor(0, 0, 0)
+		r.pdf.SetY(r.pdf.GetY() + 3)
+		lineY := r.pdf.GetY()
+		r.pdf.SetDrawColor(r.opts.GreyBgColor[0], r.opts.GreyBgColor[1], r.opts.GreyBgColor[2])
+		r.pdf.Line(10, lineY, 200, lineY)
+		r.pdf.SetDrawColor(0, 0, 0)
 
-		doc.pdf.SetX(10)
-		doc.pdf.SetY(doc.pdf.GetY() + 3)
+		r.pdf.SetX(10)
+		r.pdf.SetY(r.pdf.GetY() + 3)
 	}
 }
 
-// appendNotes to document
-func (doc *Document) appendNotes() {
-	if len(doc.Notes) == 0 {
+func (r *renderer) appendNotes() {
+	if len(r.doc.Notes) == 0 {
+		return
+	}
+	contents := make([]string, 0, len(r.doc.Notes))
+	for _, n := range r.doc.Notes {
+		if n.Content != "" {
+			contents = append(contents, n.Content)
+		}
+	}
+	if len(contents) == 0 {
 		return
 	}
 
-	currentY := doc.pdf.GetY()
+	currentY := r.pdf.GetY()
 
-	doc.pdf.SetFont(doc.Options.Font, "", 9)
-	doc.pdf.SetX(BaseMargin)
-	doc.pdf.SetRightMargin(100)
-	doc.pdf.SetY(currentY + 10)
+	r.pdf.SetFont(r.opts.Font, "", 9)
+	r.pdf.SetX(BaseMargin)
+	r.pdf.SetRightMargin(100)
+	r.pdf.SetY(currentY + 10)
 
-	_, lineHt := doc.pdf.GetFontSize()
-	html := doc.pdf.HTMLBasicNew()
-	html.Write(lineHt, doc.encodeString(doc.Notes))
+	_, lineHt := r.pdf.GetFontSize()
+	html := r.pdf.HTMLBasicNew()
+	html.Write(lineHt, r.encode(strings.Join(contents, "<br>")))
 
-	doc.pdf.SetRightMargin(BaseMargin)
-	doc.pdf.SetY(currentY)
+	r.pdf.SetRightMargin(BaseMargin)
+	r.pdf.SetY(currentY)
 }
 
-// appendTotal to document
-func (doc *Document) appendTotal() {
-	doc.pdf.SetY(doc.pdf.GetY() + 10)
-	doc.pdf.SetFont(doc.Options.Font, "", LargeTextFontSize)
-	doc.pdf.SetTextColor(
-		doc.Options.BaseTextColor[0],
-		doc.Options.BaseTextColor[1],
-		doc.Options.BaseTextColor[2],
-	)
+func (r *renderer) appendTotal() {
+	r.pdf.SetY(r.pdf.GetY() + 10)
+	r.pdf.SetFont(r.opts.Font, "", LargeTextFontSize)
+	r.setTextColor(r.opts.BaseTextColor)
 
-	// Draw TOTAL HT title
-	doc.pdf.SetX(120)
-	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
-	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(38, 10, doc.encodeString(doc.Options.TextTotalTotal), "0", 0, "R", false, 0, "")
+	// Total before document discount
+	r.totalRow(r.opts.TextTotalTotal, r.money(r.doc.TotalWithoutTaxAndWithoutDocumentDiscount()))
 
-	// Draw TOTAL HT amount
-	doc.pdf.SetX(162)
-	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
-	doc.pdf.Rect(160, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(
-		40,
-		10,
-		doc.encodeString(doc.ac.FormatMoneyDecimal(doc.TotalWithoutTaxAndWithoutDocumentDiscount())),
-		"0",
-		0,
-		"L",
-		false,
-		0,
-		"",
-	)
+	if r.doc.Discount != nil {
+		baseY := r.pdf.GetY()
 
-	if doc.Discount != nil {
-		baseY := doc.pdf.GetY() + 10
+		r.pdf.SetXY(120, baseY)
+		r.setFillColor(r.opts.DarkBgColor)
+		r.pdf.Rect(120, baseY, 40, 15, "F")
+		r.pdf.CellFormat(38, 7.5, r.encode(r.opts.TextTotalDiscounted), "0", 0, "BR", false, 0, "")
 
-		// Draw discounted title
-		doc.pdf.SetXY(120, baseY)
-		doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
-		doc.pdf.Rect(120, doc.pdf.GetY(), 40, 15, "F")
+		r.pdf.SetXY(120, baseY+7.5)
+		r.pdf.SetFont(r.opts.Font, "", BaseTextFontSize)
+		r.setTextColor(r.opts.GreyTextColor)
 
-		// title
-		doc.pdf.CellFormat(38, 7.5, doc.encodeString(doc.Options.TextTotalDiscounted), "0", 0, "BR", false, 0, "")
-
-		// description
-		doc.pdf.SetXY(120, baseY+7.5)
-		doc.pdf.SetFont(doc.Options.Font, "", BaseTextFontSize)
-		doc.pdf.SetTextColor(
-			doc.Options.GreyTextColor[0],
-			doc.Options.GreyTextColor[1],
-			doc.Options.GreyTextColor[2],
-		)
-
-		var descString bytes.Buffer
-		discountType, discountAmount := doc.Discount.getDiscount()
-		if discountType == DiscountTypePercent {
-			descString.WriteString("-")
-			descString.WriteString(discountAmount.String())
-			descString.WriteString(" % / -")
-			descString.WriteString(doc.ac.FormatMoneyDecimal(
-				doc.TotalWithoutTaxAndWithoutDocumentDiscount().Sub(doc.TotalWithoutTax())),
-			)
+		var desc bytes.Buffer
+		discountType, discountAmount := r.doc.Discount.Value()
+		if discountType == invoice.DiscountTypePercent {
+			desc.WriteString("-")
+			desc.WriteString(discountAmount.String())
+			desc.WriteString(" % / -")
+			desc.WriteString(r.money(r.doc.DocumentDiscount()))
 		} else {
-			descString.WriteString("-")
-			descString.WriteString(doc.ac.FormatMoneyDecimal(discountAmount))
-			descString.WriteString(" / -")
-			descString.WriteString(
-				discountAmount.Mul(decimal.NewFromFloat(100)).Div(doc.TotalWithoutTaxAndWithoutDocumentDiscount()).StringFixed(2),
-			)
-			descString.WriteString(" %")
+			desc.WriteString("-")
+			desc.WriteString(r.money(discountAmount))
+			desc.WriteString(" / -")
+			if base := r.doc.TotalWithoutTaxAndWithoutDocumentDiscount(); !base.IsZero() {
+				desc.WriteString(discountAmount.Mul(decimal.NewFromInt(100)).Div(base).StringFixed(2))
+			} else {
+				desc.WriteString("0.00")
+			}
+			desc.WriteString(" %")
 		}
+		r.pdf.CellFormat(38, 7.5, r.encode(desc.String()), "0", 0, "TR", false, 0, "")
 
-		doc.pdf.CellFormat(38, 7.5, doc.encodeString(descString.String()), "0", 0, "TR", false, 0, "")
+		r.pdf.SetFont(r.opts.Font, "", LargeTextFontSize)
+		r.setTextColor(r.opts.BaseTextColor)
 
-		doc.pdf.SetFont(doc.Options.Font, "", LargeTextFontSize)
-		doc.pdf.SetTextColor(
-			doc.Options.BaseTextColor[0],
-			doc.Options.BaseTextColor[1],
-			doc.Options.BaseTextColor[2],
-		)
-
-		// Draw discount amount
-		doc.pdf.SetY(baseY)
-		doc.pdf.SetX(162)
-		doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
-		doc.pdf.Rect(160, doc.pdf.GetY(), 40, 15, "F")
-		doc.pdf.CellFormat(
-			40,
-			15,
-			doc.encodeString(doc.ac.FormatMoneyDecimal(doc.TotalWithoutTax())),
-			"0",
-			0,
-			"L",
-			false,
-			0,
-			"",
-		)
-		doc.pdf.SetY(doc.pdf.GetY() + 15)
-	} else {
-		doc.pdf.SetY(doc.pdf.GetY() + 10)
+		r.pdf.SetXY(162, baseY)
+		r.setFillColor(r.opts.GreyBgColor)
+		r.pdf.Rect(160, baseY, 40, 15, "F")
+		r.pdf.CellFormat(40, 15, r.encode(r.money(r.doc.TotalWithoutTax())), "0", 0, "L", false, 0, "")
+		r.pdf.SetY(baseY + 15)
 	}
 
-	// Draw main TAX line (always same size).
-	doc.pdf.SetX(120)
-	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
-	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(38, 10, doc.encodeString(doc.Options.TextTotalTax), "0", 0, "R", false, 0, "")
-	doc.pdf.SetX(162)
-	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
-	doc.pdf.Rect(160, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(40, 10, doc.encodeString(doc.ac.FormatMoneyDecimal(doc.Tax())), "0", 0, "L", false, 0, "")
-	doc.pdf.SetY(doc.pdf.GetY() + 10)
+	// Tax
+	r.totalRow(r.opts.TextTotalTax, r.money(r.doc.Tax()))
 
-	// Draw per-name breakdown in smaller font when named taxes exist.
-	if taxLines := doc.TaxLines(); taxLines != nil {
-		doc.pdf.SetFont(doc.Options.Font, "", SmallTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.GreyTextColor[0], doc.Options.GreyTextColor[1], doc.Options.GreyTextColor[2])
+	// Per-name breakdown in smaller font when named taxes exist.
+	if taxLines := r.doc.TaxLines(); taxLines != nil {
+		r.pdf.SetFont(r.opts.Font, "", SmallTextFontSize)
+		r.setTextColor(r.opts.GreyTextColor)
 		for _, tl := range taxLines {
 			label := tl.Name
 			if label == "" {
-				label = doc.Options.TextTotalTaxOther
+				label = r.opts.TextTotalTaxOther
 				if label == "" {
 					label = "Other"
 				}
 			}
-			doc.pdf.SetX(120)
-			doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
-			doc.pdf.Rect(120, doc.pdf.GetY(), 80, 6, "F")
-			doc.pdf.CellFormat(38, 6, doc.encodeString(label), "0", 0, "R", false, 0, "")
-			doc.pdf.SetX(162)
-			doc.pdf.CellFormat(40, 6, doc.encodeString(doc.ac.FormatMoneyDecimal(tl.Amount)), "0", 0, "L", false, 0, "")
-			doc.pdf.SetY(doc.pdf.GetY() + 6)
+			r.pdf.SetX(120)
+			r.setFillColor(r.opts.GreyBgColor)
+			r.pdf.Rect(120, r.pdf.GetY(), 80, 6, "F")
+			r.pdf.CellFormat(38, 6, r.encode(label), "0", 0, "R", false, 0, "")
+			r.pdf.SetX(162)
+			r.pdf.CellFormat(40, 6, r.encode(r.money(tl.Amount)), "0", 0, "L", false, 0, "")
+			r.pdf.SetY(r.pdf.GetY() + 6)
 		}
-		doc.pdf.SetFont(doc.Options.Font, "", LargeTextFontSize)
-		doc.pdf.SetTextColor(doc.Options.BaseTextColor[0], doc.Options.BaseTextColor[1], doc.Options.BaseTextColor[2])
+		r.pdf.SetFont(r.opts.Font, "", LargeTextFontSize)
+		r.setTextColor(r.opts.BaseTextColor)
 	}
 
-	// Draw total with tax title
-	doc.pdf.SetX(120)
-	doc.pdf.SetFillColor(doc.Options.DarkBgColor[0], doc.Options.DarkBgColor[1], doc.Options.DarkBgColor[2])
-	doc.pdf.Rect(120, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(38, 10, doc.encodeString(doc.Options.TextTotalWithTax), "0", 0, "R", false, 0, "")
-
-	// Draw total with tax amount
-	doc.pdf.SetX(162)
-	doc.pdf.SetFillColor(doc.Options.GreyBgColor[0], doc.Options.GreyBgColor[1], doc.Options.GreyBgColor[2])
-	doc.pdf.Rect(160, doc.pdf.GetY(), 40, 10, "F")
-	doc.pdf.CellFormat(
-		40,
-		10,
-		doc.encodeString(doc.ac.FormatMoneyDecimal(doc.TotalWithTax())),
-		"0",
-		0,
-		"L",
-		false,
-		0,
-		"",
-	)
+	// Total with tax; the row leaves Y at its bottom edge.
+	r.totalRow(r.opts.TextTotalWithTax, r.money(r.doc.TotalWithTax()))
+	r.pdf.SetY(r.pdf.GetY() - 10)
 }
 
-// appendPaymentTerm to document
-func (doc *Document) appendPaymentTerm() {
-	if len(doc.PaymentTerm) > 0 {
-		paymentTermString := fmt.Sprintf(
-			"%s: %s",
-			doc.encodeString(doc.Options.TextPaymentTermTitle),
-			doc.encodeString(doc.PaymentTerm),
-		)
-		doc.pdf.SetY(doc.pdf.GetY() + 15)
+// totalRow draws a 10mm label/value row at the current Y and moves Y below it.
+func (r *renderer) totalRow(label, value string) {
+	y := r.pdf.GetY()
+	r.pdf.SetX(120)
+	r.setFillColor(r.opts.DarkBgColor)
+	r.pdf.Rect(120, y, 40, 10, "F")
+	r.pdf.CellFormat(38, 10, r.encode(label), "0", 0, "R", false, 0, "")
 
-		doc.pdf.SetX(120)
-		doc.pdf.SetFont(doc.Options.BoldFont, "B", 10)
-		doc.pdf.CellFormat(80, 4, doc.encodeString(paymentTermString), "0", 0, "R", false, 0, "")
+	r.pdf.SetX(162)
+	r.setFillColor(r.opts.GreyBgColor)
+	r.pdf.Rect(160, y, 40, 10, "F")
+	r.pdf.CellFormat(40, 10, r.encode(value), "0", 0, "L", false, 0, "")
+	r.pdf.SetY(y + 10)
+}
+
+// appendPaymentTerm prints the due date, payment terms and bank details.
+func (r *renderer) appendPaymentTerm() {
+	var lines []string
+	if r.doc.DueDate != "" {
+		lines = append(lines, fmt.Sprintf("%s: %s", r.opts.TextDueDateTitle, r.doc.DueDate))
+	}
+	if r.doc.PaymentTerm != "" {
+		lines = append(lines, fmt.Sprintf("%s: %s", r.opts.TextPaymentTermTitle, r.doc.PaymentTerm))
+	}
+	var bank []string
+	if p := r.doc.Payment; p != nil {
+		if p.IBAN != "" {
+			bank = append(bank, "IBAN: "+p.IBAN)
+		}
+		if p.BIC != "" {
+			bank = append(bank, "BIC: "+p.BIC)
+		}
+		if p.Reference != "" {
+			bank = append(bank, r.opts.TextPaymentReferenceTitle+": "+p.Reference)
+		}
+	}
+	if len(lines) == 0 && len(bank) == 0 {
+		return
+	}
+
+	r.pdf.SetY(r.pdf.GetY() + 15)
+	r.pdf.SetFont(r.opts.BoldFont, "B", 10)
+	for _, line := range lines {
+		r.pdf.SetX(120)
+		r.pdf.CellFormat(80, 4, r.encode(line), "0", 0, "R", false, 0, "")
+		r.pdf.SetY(r.pdf.GetY() + 5)
+	}
+	if len(bank) > 0 {
+		r.pdf.SetFont(r.opts.Font, "", BaseTextFontSize)
+		r.setTextColor(r.opts.GreyTextColor)
+		for _, line := range bank {
+			r.pdf.SetX(120)
+			r.pdf.CellFormat(80, 4, r.encode(line), "0", 0, "R", false, 0, "")
+			r.pdf.SetY(r.pdf.GetY() + 4)
+		}
+		r.setTextColor(r.opts.BaseTextColor)
 	}
 }

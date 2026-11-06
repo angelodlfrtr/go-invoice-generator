@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
-	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
+	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 	"github.com/shopspring/decimal"
 )
 
@@ -34,9 +33,9 @@ var (
 	// letters (ISO 4217).
 	ErrInvalidCurrencyCode = errors.New("invalid ISO 4217 currency code")
 
-	// ErrInvalidDate is returned for a date that is not DD/MM/YYYY, YYYY-MM-DD
-	// or YYYYMMDD.
-	ErrInvalidDate = errors.New("invalid date")
+	// ErrInvalidDate is invoice.ErrInvalidDate: a date that is not DD/MM/YYYY,
+	// YYYY-MM-DD or YYYYMMDD.
+	ErrInvalidDate = invoice.ErrInvalidDate
 
 	// ErrInvalidTaxCategory is returned for an unknown VAT category code or a
 	// rate that does not match the category (BR-S-05, BR-E-05, BR-O-05...).
@@ -103,7 +102,7 @@ type lineTax struct {
 }
 
 // resolveLineTax maps an item's generator.Tax to EN 16931 VAT semantics.
-func resolveLineTax(item *generator.Item, opts Options) (lineTax, error) {
+func resolveLineTax(item *invoice.Item, opts Options) (lineTax, error) {
 	lt := lineTax{hasRate: true}
 
 	switch {
@@ -169,16 +168,14 @@ func normalizeCountry(field, code string, required bool) (string, error) {
 	return code, nil
 }
 
-// formatDate converts "DD/MM/YYYY", "YYYY-MM-DD" or "YYYYMMDD" to "YYYYMMDD"
+// formatDate converts a document date (see invoice.ParseDate) to "YYYYMMDD"
 // (CII format 102). It returns ErrInvalidDate for anything else.
 func formatDate(field, date string) (string, error) {
-	date = strings.TrimSpace(date)
-	for _, layout := range []string{"02/01/2006", "2006-01-02", "20060102"} {
-		if t, err := time.Parse(layout, date); err == nil {
-			return t.Format("20060102"), nil
-		}
+	t, err := invoice.ParseDate(date)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", field, err)
 	}
-	return "", fmt.Errorf("%s %q: %w", field, date, ErrInvalidDate)
+	return t.Format("20060102"), nil
 }
 
 // optionalDate is formatDate for fields that may be empty.
