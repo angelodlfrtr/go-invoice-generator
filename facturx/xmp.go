@@ -81,7 +81,7 @@ func buildFXXMPBlocks(profile Profile) ([]byte, error) {
 		return nil, err
 	}
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, xmpData{Profile: profile.String()}); err != nil {
+	if err := tmpl.Execute(&buf, xmpData{Profile: profile.xmpConformanceLevel()}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

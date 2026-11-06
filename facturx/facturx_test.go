@@ -201,8 +201,14 @@ func TestMustangValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("mustang-cli failed: %v\n%s", err, out)
 			}
-			if !strings.Contains(string(out), `status="valid"`) {
+			// mustang reports a <pdf> summary, an <xml> summary and a global one.
+			// The global summary can be "valid" while the <pdf> section is not,
+			// so reject any invalid sub-summary or error element.
+			if strings.Contains(string(out), `status="invalid"`) || strings.Contains(string(out), "<error") {
 				t.Fatalf("profile %s not valid:\n%s", profile, out)
+			}
+			if !strings.Contains(string(out), `status="valid"`) {
+				t.Fatalf("profile %s: no valid summary found:\n%s", profile, out)
 			}
 		})
 	}

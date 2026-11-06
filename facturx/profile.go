@@ -28,3 +28,13 @@ func (p Profile) guidelineID() string {
 
 // String returns the profile name.
 func (p Profile) String() string { return string(p) }
+
+// xmpConformanceLevel returns the value expected in fx:ConformanceLevel.
+// The Factur-X specification spells the BASIC WL level with a space in XMP,
+// while the guideline URN and common usage write it as BASIC-WL.
+func (p Profile) xmpConformanceLevel() string {
+	if p == ProfileBasicWL {
+		return "BASIC WL"
+	}
+	return p.String()
+}

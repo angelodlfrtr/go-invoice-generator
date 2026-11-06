@@ -33,14 +33,18 @@ verapdf-check-3b: test
 	verapdf --flavour 3b out/facturx_BASIC-WL.pdf
 	verapdf --flavour 3b out/facturx_BASIC.pdf
 
+# mustang-cli exits 0 even when the <pdf> or <xml> sub-summary is invalid,
+# so inspect the report for invalid statuses and error elements.
 .PHONY: mustang-check-facturx
 mustang-check-facturx: test
-	mustang-cli --action validate --source out/facturx.pdf
-	mustang-cli --action validate --source out/facturx_MINIMUM.pdf
-	mustang-cli --action validate --source out/facturx_EXTENDED.pdf
-	mustang-cli --action validate --source out/facturx_EN_16931.pdf
-	mustang-cli --action validate --source out/facturx_BASIC-WL.pdf
-	mustang-cli --action validate --source out/facturx_BASIC.pdf
+	@for f in out/facturx.pdf out/facturx_MINIMUM.pdf out/facturx_EXTENDED.pdf \
+		out/facturx_EN_16931.pdf out/facturx_BASIC-WL.pdf out/facturx_BASIC.pdf; do \
+		echo "== $$f"; \
+		report=$$(mustang-cli --action validate --source "$$f"); echo "$$report"; \
+		if echo "$$report" | grep -q -e 'status="invalid"' -e '<error'; then \
+			echo "mustang: $$f is NOT valid"; exit 1; \
+		fi; \
+	done
 
 .PHONY: clean
 clean:
