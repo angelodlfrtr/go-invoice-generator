@@ -1,6 +1,7 @@
 package invoice
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -179,4 +180,74 @@ func TestBreakdownPrecision(t *testing.T) {
 	assertDec(t, "line total at precision 1", bd.LineTotal, "1234.6")
 	assertDec(t, "tax at precision 1", bd.Tax, "123.5")
 	assertDec(t, "grand total at precision 1", bd.GrandTotal, "1358.1")
+}
+
+func TestBreakdownChargesAndPrepaid(t *testing.T) {
+	doc := breakdownDoc(t)
+	doc.SetDiscount(&Discount{Percent: "10"})
+	doc.AppendItem(&Item{Name: "a", UnitCost: "100", Quantity: "1", Tax: &Tax{Percent: "20", Name: "VAT 20%"}})
+	doc.AppendItem(&Item{Name: "b", UnitCost: "50", Quantity: "1", Tax: &Tax{Percent: "5.5", Name: "VAT 5.5%"}})
+	doc.AddCharge(&Charge{Name: "Shipping", Amount: "12.345", ReasonCode: "FC", Tax: &Tax{Percent: "20", Name: "VAT 20%"}})
+	doc.AddCharge(&Charge{Name: "Eco-contribution", Amount: "2"}) // untaxed
+	doc.SetPrepaid("50")
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	bd := doc.Breakdown()
+	assertDec(t, "line total", bd.LineTotal, "150.00")
+	assertDec(t, "discount", bd.Allowance, "15.00")
+	// Charges are rounded individually: 12.35 + 2.00.
+	assertDec(t, "charge total", bd.ChargeTotal, "14.35")
+	// Basis = 150 - 15 + 14.35.
+	assertDec(t, "tax basis", bd.TaxBasis, "149.35")
+
+	// The discount is split on line totals only; charges join their group.
+	// 20% group: 100 - 10 + 12.35 = 102.35 -> tax 20.47
+	// 5.5% group: 50 - 5 = 45 -> tax 2.48 (2.475 rounded half up)
+	// untaxed: 2.00
+	var tax20, tax55 decimal.Decimal
+	for _, g := range bd.Groups {
+		switch {
+		case g.Percent.Equal(mustDec(t, "20")):
+			assertDec(t, "20% basis", g.Basis(), "102.35")
+			tax20 = g.Tax
+		case g.Percent.Equal(mustDec(t, "5.5")):
+			assertDec(t, "5.5% basis", g.Basis(), "45.00")
+			tax55 = g.Tax
+		case g.Untaxed:
+			assertDec(t, "untaxed basis", g.Basis(), "2.00")
+		}
+	}
+	assertDec(t, "20% tax", tax20, "20.47")
+	assertDec(t, "5.5% tax", tax55, "2.48")
+	assertDec(t, "tax", bd.Tax, "22.95")
+	assertDec(t, "grand total", bd.GrandTotal, "172.30")
+	assertDec(t, "prepaid", bd.Prepaid, "50.00")
+	assertDec(t, "due", bd.DuePayable, "122.30")
+
+	if !doc.ChargeTotal().Equal(bd.ChargeTotal) || !doc.AmountDue().Equal(bd.DuePayable) || !doc.PrepaidAmount().Equal(bd.Prepaid) {
+		t.Error("document accessors differ from the breakdown")
+	}
+
+	// Tax lines still add up, with the charge inside the VAT 20% name.
+	var sum decimal.Decimal
+	for _, l := range doc.TaxLines() {
+		sum = sum.Add(l.Amount)
+	}
+	assertDec(t, "tax lines sum", sum, "22.95")
+}
+
+func TestChargeValidation(t *testing.T) {
+	doc := breakdownDoc(t)
+	doc.AppendItem(&Item{Name: "a", UnitCost: "100", Quantity: "1", Tax: &Tax{Percent: "20"}})
+	doc.AddCharge(&Charge{Name: "Bad", Amount: "1", Tax: &Tax{Amount: "3"}})
+	if err := doc.Validate(); !errors.Is(err, ErrInvalidCharge) {
+		t.Fatalf("got %v, want ErrInvalidCharge", err)
+	}
+	doc.Charges = nil
+	doc.SetPrepaid("-1")
+	if err := doc.Validate(); !errors.Is(err, ErrInvalidPrepaid) {
+		t.Fatalf("got %v, want ErrInvalidPrepaid", err)
+	}
 }

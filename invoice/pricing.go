@@ -2,6 +2,7 @@ package invoice
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/shopspring/decimal"
 )
@@ -135,3 +136,43 @@ func (d *Discount) Value() (string, decimal.Decimal) { return d.getDiscount() }
 // Value returns the tax kind (TaxTypeAmount or TaxTypePercent) and its parsed
 // value; Prepare must have run.
 func (t *Tax) Value() (string, decimal.Decimal) { return t.getTax() }
+
+// -----------------------------------------------------------------------
+
+// ErrInvalidCharge is returned when a Charge has no amount or a fixed-amount tax.
+var ErrInvalidCharge = errors.New("invalid charge")
+
+// Charge is a document-level charge (BG-21) such as freight or packaging,
+// added to the taxable amount on top of the items. Amount excludes tax.
+type Charge struct {
+	Name   string `json:"name,omitempty" validate:"required"`
+	Amount string `json:"amount,omitempty"` // e.g. "15.00", excluding tax
+	// ReasonCode is the UNTDID 7161 charge reason, e.g. "FC" freight,
+	// "PC" packing, "AEM" eco-contribution. Optional.
+	ReasonCode string `json:"reason_code,omitempty"`
+	// Tax is the percentage tax applied to the charge; nil means untaxed.
+	Tax *Tax `json:"tax,omitempty"`
+
+	_amount decimal.Decimal
+}
+
+// Prepare parses and validates the charge.
+func (c *Charge) Prepare() error {
+	amount, err := decimal.NewFromString(c.Amount)
+	if err != nil {
+		return fmt.Errorf("%w: amount %q: %v", ErrInvalidCharge, c.Amount, err)
+	}
+	c._amount = amount
+	if c.Tax != nil {
+		if err := c.Tax.Prepare(); err != nil {
+			return err
+		}
+		if len(c.Tax.Amount) > 0 {
+			return fmt.Errorf("%w: %q: a charge needs a percentage tax", ErrInvalidCharge, c.Name)
+		}
+	}
+	return nil
+}
+
+// AmountDecimal returns the parsed amount; Prepare must have run.
+func (c *Charge) AmountDecimal() decimal.Decimal { return c._amount }

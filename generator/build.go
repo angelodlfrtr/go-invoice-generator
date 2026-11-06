@@ -336,6 +336,11 @@ func (r *renderer) appendTotal() {
 		r.pdf.SetY(baseY + 15)
 	}
 
+	// Document-level charges, one row each.
+	for _, c := range r.doc.Charges {
+		r.totalRow(c.Name, "+ "+r.money(c.AmountDecimal().Round(r.doc.RoundingPrecision())))
+	}
+
 	// Tax
 	r.totalRow(r.opts.TextTotalTax, r.money(r.doc.Tax()))
 
@@ -363,8 +368,15 @@ func (r *renderer) appendTotal() {
 		r.setTextColor(r.opts.BaseTextColor)
 	}
 
-	// Total with tax; the row leaves Y at its bottom edge.
 	r.totalRow(r.opts.TextTotalWithTax, r.money(r.doc.TotalWithTax()))
+
+	// Amount already paid and the balance due.
+	if prepaid := r.doc.PrepaidAmount(); prepaid.Sign() > 0 {
+		r.totalRow(r.opts.TextTotalPrepaid, "- "+r.money(prepaid))
+		r.totalRow(r.opts.TextTotalDue, r.money(r.doc.AmountDue()))
+	}
+
+	// Leave Y on the last row, as the payment block expects.
 	r.pdf.SetY(r.pdf.GetY() - 10)
 }
 

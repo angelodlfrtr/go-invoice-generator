@@ -49,6 +49,10 @@ var (
 	// amount is due but neither a due date nor payment terms are given (BR-CO-25).
 	ErrMissingPaymentTerms = errors.New("a payment due date or payment terms description is required when an amount is due")
 
+	// ErrUnsupportedDocumentType is returned for quotations and delivery notes,
+	// which have no e-invoice representation, unless Options.TypeCode is set.
+	ErrUnsupportedDocumentType = errors.New("document type has no Factur-X representation")
+
 	// ErrInvalidPeriod is returned when only one of InvoicingPeriodStart and
 	// InvoicingPeriodEnd is set.
 	ErrInvalidPeriod = errors.New("invoicing period needs both a start and an end date")
@@ -101,53 +105,59 @@ type lineTax struct {
 	fixedAmount         bool // generator fixed-amount tax, only legal in MINIMUM
 }
 
-// resolveLineTax maps an item's generator.Tax to EN 16931 VAT semantics.
+// resolveLineTax maps an item's Tax to EN 16931 VAT semantics.
 func resolveLineTax(item *invoice.Item, opts Options) (lineTax, error) {
+	return resolveTax("item "+item.Name, item.Tax, opts)
+}
+
+// resolveTax maps a Tax (nil for untaxed) to EN 16931 VAT semantics and
+// checks the category against its rate. what names the owner in errors.
+func resolveTax(what string, tax *invoice.Tax, opts Options) (lineTax, error) {
 	lt := lineTax{hasRate: true}
 
 	switch {
-	case item.Tax == nil:
+	case tax == nil:
 		lt.category = opts.noTaxCategoryCode()
 		lt.percent = decimal.Zero
 		lt.exemptionReason = opts.NoTaxExemptionReason
 		lt.exemptionReasonCode = opts.NoTaxExemptionReasonCode
 
-	case item.Tax.Amount != "":
+	case tax.Amount != "":
 		lt.fixedAmount = true
 		return lt, nil
 
 	default:
-		p, err := decimal.NewFromString(item.Tax.Percent)
+		p, err := decimal.NewFromString(tax.Percent)
 		if err != nil {
-			return lt, fmt.Errorf("item %q: tax percent %q: %w", item.Name, item.Tax.Percent, err)
+			return lt, fmt.Errorf("%s: tax percent %q: %w", what, tax.Percent, err)
 		}
 		lt.percent = p
-		lt.category = item.Tax.Category
+		lt.category = tax.Category
 		if lt.category == "" {
 			lt.category = opts.taxCategoryCode()
 		}
-		lt.exemptionReason = item.Tax.ExemptionReason
-		lt.exemptionReasonCode = item.Tax.ExemptionReasonCode
+		lt.exemptionReason = tax.ExemptionReason
+		lt.exemptionReasonCode = tax.ExemptionReasonCode
 	}
 
 	lt.category = strings.ToUpper(strings.TrimSpace(lt.category))
 	spec, ok := vatCategories[lt.category]
 	if !ok {
-		return lt, fmt.Errorf("item %q: category %q: %w", item.Name, lt.category, ErrInvalidTaxCategory)
+		return lt, fmt.Errorf("%s: category %q: %w", what, lt.category, ErrInvalidTaxCategory)
 	}
 	switch {
 	case spec.noRate:
 		if !lt.percent.IsZero() {
-			return lt, fmt.Errorf("item %q: category %s must not carry a rate, got %s: %w", item.Name, lt.category, lt.percent, ErrInvalidTaxCategory)
+			return lt, fmt.Errorf("%s: category %s must not carry a rate, got %s: %w", what, lt.category, lt.percent, ErrInvalidTaxCategory)
 		}
 		lt.hasRate = false
 	case spec.zeroRate && !lt.percent.IsZero():
-		return lt, fmt.Errorf("item %q: category %s requires a 0%% rate, got %s: %w", item.Name, lt.category, lt.percent, ErrInvalidTaxCategory)
+		return lt, fmt.Errorf("%s: category %s requires a 0%% rate, got %s: %w", what, lt.category, lt.percent, ErrInvalidTaxCategory)
 	case lt.category == "S" && lt.percent.Sign() <= 0:
-		return lt, fmt.Errorf("item %q: category S requires a rate above 0%% (use Z or E for untaxed items): %w", item.Name, ErrInvalidTaxCategory)
+		return lt, fmt.Errorf("%s: category S requires a rate above 0%% (use Z or E for untaxed items): %w", what, ErrInvalidTaxCategory)
 	}
 	if spec.needsReason && lt.exemptionReason == "" && lt.exemptionReasonCode == "" {
-		return lt, fmt.Errorf("item %q: category %s: %w", item.Name, lt.category, ErrMissingExemptionReason)
+		return lt, fmt.Errorf("%s: category %s: %w", what, lt.category, ErrMissingExemptionReason)
 	}
 
 	return lt, nil

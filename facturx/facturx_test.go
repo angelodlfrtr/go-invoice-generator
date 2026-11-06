@@ -17,8 +17,6 @@ import (
 	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 )
 
-var hundred = decimal.NewFromInt(100)
-
 // frRuleRe matches a French BR-FR rule reported inside a warning or error
 // element (the mustang log also mentions the schematron file name).
 var frRuleRe = regexp.MustCompile(`<(warning|error)[^>]*>\s*BR-FR`)
@@ -292,6 +290,9 @@ type fixture struct {
 	opts Options
 }
 
+// extraFixtures lets test files register more fixtures.
+var extraFixtures []func(t *testing.T, profile Profile, fx map[string]fixture)
+
 // fixtures lists every (document, options) pair rendered for each profile.
 // The Makefile validation targets glob out/facturx*.pdf.
 func fixtures(t *testing.T, profile Profile) map[string]fixture {
@@ -305,6 +306,9 @@ func fixtures(t *testing.T, profile Profile) map[string]fixture {
 	}
 	if profile == ProfileEN16931 || profile == ProfileExtended {
 		fx["facturx_fr"] = fixture{buildFrenchDoc(t), frenchOptions(profile)}
+	}
+	for _, add := range extraFixtures {
+		add(t, profile, fx)
 	}
 	return fx
 }
@@ -455,6 +459,7 @@ type xmlAllowance struct {
 	ChargeIndicator string `xml:"ChargeIndicator>Indicator"`
 	ActualAmount    string `xml:"ActualAmount"`
 	Reason          string `xml:"Reason"`
+	ReasonCode      string `xml:"ReasonCode"`
 	CategoryCode    string `xml:"CategoryTradeTax>CategoryCode"`
 	Rate            string `xml:"CategoryTradeTax>RateApplicablePercent"`
 }
@@ -503,6 +508,8 @@ type xmlInvoice struct {
 	DueDate         string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradePaymentTerms>DueDateDateTime>DateTimeString"`
 	LineTotal       string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementHeaderMonetarySummation>LineTotalAmount"`
 	AllowanceTotal  string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementHeaderMonetarySummation>AllowanceTotalAmount"`
+	ChargeTotal     string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementHeaderMonetarySummation>ChargeTotalAmount"`
+	Prepaid         string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementHeaderMonetarySummation>TotalPrepaidAmount"`
 	TaxBasisTotal   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementHeaderMonetarySummation>TaxBasisTotalAmount"`
 	TaxTotals       []xmlAmount    `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementHeaderMonetarySummation>TaxTotalAmount"`
 	GrandTotal      string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementHeaderMonetarySummation>GrandTotalAmount"`
@@ -1069,4 +1076,254 @@ func TestFixedAmountTaxAllowedInMinimum(t *testing.T) {
 		dec(t, inv.GrandTotal), dec(t, inv.TaxBasisTotal).Add(dec(t, inv.taxTotal().Value)))
 	// 1200 + 270 + 10 = 1480 basis; 20% of 1470 = 294 + 2 fixed = 296.
 	assertEqual(t, "fixed tax total", dec(t, inv.taxTotal().Value), decimal.RequireFromString("296.00"))
+}
+
+// ---- Charges, prepaid, document types ----
+
+// buildChargesDoc adds document-level charges, a discount and a prepayment.
+func buildChargesDoc(t *testing.T) *invoice.Document {
+	t.Helper()
+	doc := buildTestDoc(t)
+	doc.SetDiscount(&invoice.Discount{Percent: "5"})
+	doc.AddCharge(&invoice.Charge{Name: "Shipping", Amount: "15.00", ReasonCode: "FC", Tax: &invoice.Tax{Percent: "20"}})
+	doc.AddCharge(&invoice.Charge{Name: "Eco-contribution", Amount: "2.00"})
+	doc.SetPrepaid("100.00")
+	return doc
+}
+
+func chargesOptions(profile Profile) Options {
+	o := simpleOptions(profile)
+	o.NoTaxExemptionReason = "Not subject to VAT"
+	return o
+}
+
+func init() {
+	extraFixtures = append(extraFixtures, func(t *testing.T, profile Profile, fx map[string]fixture) {
+		fx["facturx_charges"] = fixture{buildChargesDoc(t), chargesOptions(profile)}
+	})
+}
+
+func TestChargesAndPrepaid(t *testing.T) {
+	doc := buildChargesDoc(t)
+	inv := parseInvoice(t, doc, chargesOptions(ProfileEN16931))
+
+	// 1470 lines - 73.50 discount + 17 charges = 1413.50 basis
+	assertEqual(t, "line total", dec(t, inv.LineTotal), decimal.RequireFromString("1470.00"))
+	assertEqual(t, "allowance total", dec(t, inv.AllowanceTotal), decimal.RequireFromString("73.50"))
+	assertEqual(t, "charge total", dec(t, inv.ChargeTotal), decimal.RequireFromString("17.00"))
+	assertEqual(t, "BR-CO-13 basis", dec(t, inv.TaxBasisTotal),
+		dec(t, inv.LineTotal).Sub(dec(t, inv.AllowanceTotal)).Add(dec(t, inv.ChargeTotal)))
+	assertEqual(t, "prepaid", dec(t, inv.Prepaid), decimal.RequireFromString("100.00"))
+	assertEqual(t, "BR-CO-16 due", dec(t, inv.DuePayable), dec(t, inv.GrandTotal).Sub(dec(t, inv.Prepaid)))
+	assertEqual(t, "PDF amount due", dec(t, inv.DuePayable), doc.AmountDue())
+
+	charges := 0
+	for _, ac := range inv.Allowances {
+		if ac.ChargeIndicator == "true" {
+			charges++
+			if ac.Reason == "Shipping" && (ac.ReasonCode != "FC" || ac.CategoryCode != "S" || ac.Rate != "20.00") {
+				t.Errorf("shipping charge: %+v", ac)
+			}
+			if ac.Reason == "Eco-contribution" && (ac.CategoryCode != "E" || ac.Rate != "0.00") {
+				t.Errorf("eco charge: %+v", ac)
+			}
+		}
+	}
+	if charges != 2 {
+		t.Errorf("expected 2 charges, got %d", charges)
+	}
+
+	// MINIMUM carries no prepaid element but the due amount still nets it.
+	minimum := parseInvoice(t, buildChargesDoc(t), chargesOptions(ProfileMinimum))
+	if minimum.Prepaid != "" {
+		t.Error("MINIMUM must not carry TotalPrepaidAmount")
+	}
+	assertEqual(t, "MINIMUM due", dec(t, minimum.DuePayable), dec(t, minimum.GrandTotal).Sub(decimal.RequireFromString("100")))
+}
+
+func TestUnsupportedDocumentType(t *testing.T) {
+	for _, typ := range []string{invoice.Quotation, invoice.DeliveryNote} {
+		doc := buildTestDoc(t)
+		doc.SetType(typ)
+		if err := doc.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := BuildXML(doc, simpleOptions(ProfileMinimum)); !errors.Is(err, ErrUnsupportedDocumentType) {
+			t.Errorf("%s: got %v, want ErrUnsupportedDocumentType", typ, err)
+		}
+		// An explicit type code overrides the check.
+		o := simpleOptions(ProfileMinimum)
+		o.TypeCode = "380"
+		if _, err := BuildXML(doc, o); err != nil {
+			t.Errorf("%s with TypeCode: %v", typ, err)
+		}
+	}
+}
+
+func TestFrenchPrepaidCadre(t *testing.T) {
+	// S2: already paid, prepaid equals the total and the due date is the payment date.
+	doc := buildFrenchDoc(t)
+	doc.SetType(invoice.Invoice)
+	doc.PrecedingInvoice = nil
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	doc.SetPrepaid(doc.TotalWithTax().String())
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	opts := frenchOptions(ProfileEN16931)
+	opts.BusinessProcessID = "S2"
+	if _, err := BuildXML(doc, opts); err != nil {
+		t.Fatalf("already-paid cadre with full prepayment should pass: %v", err)
+	}
+
+	doc.SetPrepaid("1.00")
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BuildXML(doc, opts); !errors.Is(err, ErrFrenchRules) {
+		t.Fatalf("partial prepayment under S2: got %v, want ErrFrenchRules", err)
+	}
+
+	// S4: final invoice after deposit cannot itself be a deposit invoice.
+	opts.BusinessProcessID = "S4"
+	opts.TypeCode = "386"
+	doc.SetPrepaid("")
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BuildXML(doc, opts); !errors.Is(err, ErrFrenchRules) {
+		t.Fatalf("deposit type under S4: got %v, want ErrFrenchRules", err)
+	}
+}
+
+// ---- Reception ----
+
+func TestReadRoundTrip(t *testing.T) {
+	doc := buildFullTestDoc(t)
+	pdf, err := Attach(buildPDF(t, doc), doc, fullOptions(ProfileEN16931))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := Read(pdf)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if p.Profile != ProfileEN16931 || p.TypeCode != "380" || p.BusinessProcessID == "" || p.VATPointDateCode != "5" {
+		t.Errorf("metadata: %+v", p)
+	}
+	got := p.Document
+	if got.Ref != "INV-2024-001" || got.Date != "20240101" || got.DueDate != "20240201" || got.Type != invoice.Invoice {
+		t.Errorf("header: ref %q date %q due %q type %q", got.Ref, got.Date, got.DueDate, got.Type)
+	}
+	if got.Company.VATID != "FR12345678901" || got.Company.LegalID != "123456789" || got.Company.LegalIDScheme != "0002" ||
+		got.Company.Address.CountryCode != "FR" || got.Company.ContactName != "Jane Smith" {
+		t.Errorf("seller: %+v", got.Company)
+	}
+	if got.Customer.VATID != "US123456789" || got.Customer.ElectronicAddress != "ap@johndoe.example" {
+		t.Errorf("buyer: %+v", got.Customer)
+	}
+	if got.Delivery == nil || got.Delivery.ShipTo == nil || got.Delivery.ShipTo.Name != "John Doe Warehouse" ||
+		got.Delivery.Date != "20231231" || got.Delivery.PeriodStart != "20231201" {
+		t.Errorf("delivery: %+v", got.Delivery)
+	}
+	if got.Payment == nil || got.Payment.IBAN != "FR7630006000011234567890189" || got.Payment.BIC != "BNPAFRPP" {
+		t.Errorf("payment: %+v", got.Payment)
+	}
+	if len(got.Items) != 5 || got.Items[0].Unit != "DAY" || got.Items[0].Description == "" {
+		t.Fatalf("items: %d", len(got.Items))
+	}
+	if got.Items[1].UnitCost != "75.00" || got.Items[1].Discount == nil || got.Items[1].Discount.Amount != "30" {
+		t.Errorf("discounted line: cost %q discount %+v", got.Items[1].UnitCost, got.Items[1].Discount)
+	}
+	if got.Items[3].Tax == nil || got.Items[3].Tax.Category != "E" || got.Items[3].Tax.ExemptionReason == "" {
+		t.Errorf("exempt line tax: %+v", got.Items[3].Tax)
+	}
+	if got.Discount == nil || len(got.Notes) != 1 || got.ClientRef != "COST-CENTRE-42" || got.PurchaseOrderRef != "PO-2023-0099" {
+		t.Errorf("discount %+v notes %d refs %q %q", got.Discount, len(got.Notes), got.ClientRef, got.PurchaseOrderRef)
+	}
+
+	assertEqual(t, "stated grand total", p.Totals.GrandTotal, doc.TotalWithTax())
+	if err := p.Verify(); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+
+	// The parsed document exports again to the same totals.
+	again := parseInvoice(t, got, fullOptions(ProfileEN16931))
+	assertEqual(t, "re-exported grand total", dec(t, again.GrandTotal), doc.TotalWithTax())
+	assertEqual(t, "re-exported tax", dec(t, again.taxTotal().Value), doc.Tax())
+}
+
+func TestReadChargesAndFrench(t *testing.T) {
+	doc := buildChargesDoc(t)
+	pdf, err := Attach(buildPDF(t, doc), doc, chargesOptions(ProfileBasic))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Read(pdf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Document.Charges) != 2 || p.Document.Charges[0].ReasonCode != "FC" || p.Document.Prepaid != "100.00" {
+		t.Errorf("charges %+v prepaid %q", p.Document.Charges, p.Document.Prepaid)
+	}
+	if err := p.Verify(); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+
+	fr := buildFrenchDoc(t)
+	pdf, err = Attach(buildPDF(t, fr), fr, frenchOptions(ProfileEN16931))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err = Read(pdf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.FrenchFlow != "B2B" || len(p.Document.Notes) != 3 || p.Document.Type != invoice.CreditNote ||
+		p.Document.PrecedingInvoice == nil || p.Document.PrecedingInvoice.Date != "20231201" {
+		t.Errorf("french: flow %q notes %d type %q preceding %+v", p.FrenchFlow, len(p.Document.Notes), p.Document.Type, p.Document.PrecedingInvoice)
+	}
+	if err := p.Verify(); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	// Re-exporting under the French rules works without duplicating the BAR note.
+	if _, err := BuildXML(p.Document, frenchOptions(ProfileEN16931)); err != nil {
+		t.Fatalf("re-export: %v", err)
+	}
+}
+
+func TestReadErrors(t *testing.T) {
+	if _, err := Extract(buildPDF(t, buildTestDoc(t))); !errors.Is(err, ErrNoXML) {
+		t.Errorf("plain PDF: got %v, want ErrNoXML", err)
+	}
+	if _, err := Parse([]byte(`<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"/>`)); !errors.Is(err, ErrNotCII) {
+		t.Errorf("UBL: got %v, want ErrNotCII", err)
+	}
+	if _, err := Parse([]byte("not xml")); err == nil {
+		t.Error("garbage should fail")
+	}
+
+	// A tampered total is caught by Verify.
+	doc := buildTestDoc(t)
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	xmlBytes, err := BuildXML(doc, simpleOptions(ProfileBasic))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := strings.Replace(string(xmlBytes), "<ram:GrandTotalAmount>1764.00</ram:GrandTotalAmount>", "<ram:GrandTotalAmount>1700.00</ram:GrandTotalAmount>", 1)
+	if tampered == string(xmlBytes) {
+		t.Fatalf("fixture changed, grand total not found:\n%s", xmlBytes)
+	}
+	p, err := Parse([]byte(tampered))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Verify(); !errors.Is(err, ErrTotalsMismatch) {
+		t.Errorf("tampered: got %v, want ErrTotalsMismatch", err)
+	}
 }

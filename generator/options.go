@@ -43,6 +43,8 @@ type Options struct {
 	TextTotalTax        string `default:"Tax" json:"text_total_tax,omitempty"`
 	TextTotalTaxOther   string `default:"Other" json:"text_total_tax_other,omitempty"`
 	TextTotalWithTax    string `default:"Total with tax" json:"text_total_with_tax,omitempty"`
+	TextTotalPrepaid    string `default:"Already paid" json:"text_total_prepaid,omitempty"`
+	TextTotalDue        string `default:"Amount due" json:"text_total_due,omitempty"`
 
 	BaseTextColor []int `default:"[35,35,35]" json:"base_text_color,omitempty"`
 	GreyTextColor []int `default:"[82,82,82]" json:"grey_text_color,omitempty"`

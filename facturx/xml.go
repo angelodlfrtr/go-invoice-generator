@@ -192,6 +192,23 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				</ram:CategoryTradeTax>
 			</ram:SpecifiedTradeAllowanceCharge>
 			{{- end}}
+			{{- range .DocCharges}}
+			<ram:SpecifiedTradeAllowanceCharge>
+				<ram:ChargeIndicator><udt:Indicator>true</udt:Indicator></ram:ChargeIndicator>
+				<ram:ActualAmount>{{.ActualAmount}}</ram:ActualAmount>
+				{{- if .ReasonCode}}
+				<ram:ReasonCode>{{xe .ReasonCode}}</ram:ReasonCode>
+				{{- end}}
+				<ram:Reason>{{xe .Reason}}</ram:Reason>
+				<ram:CategoryTradeTax>
+					<ram:TypeCode>VAT</ram:TypeCode>
+					<ram:CategoryCode>{{.CategoryCode}}</ram:CategoryCode>
+					{{- if .HasRate}}
+					<ram:RateApplicablePercent>{{.Percent}}</ram:RateApplicablePercent>
+					{{- end}}
+				</ram:CategoryTradeTax>
+			</ram:SpecifiedTradeAllowanceCharge>
+			{{- end}}
 			{{- if or .PaymentTermsDescription .PaymentDueDate}}
 			<ram:SpecifiedTradePaymentTerms>
 				{{- if .PaymentTermsDescription}}
@@ -208,6 +225,9 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				{{- if .LineTotalAmount}}
 				<ram:LineTotalAmount>{{.LineTotalAmount}}</ram:LineTotalAmount>
 				{{- end}}
+				{{- if .ChargeTotalAmount}}
+				<ram:ChargeTotalAmount>{{.ChargeTotalAmount}}</ram:ChargeTotalAmount>
+				{{- end}}
 				{{- if .AllowanceTotalAmount}}
 				<ram:AllowanceTotalAmount>{{.AllowanceTotalAmount}}</ram:AllowanceTotalAmount>
 				{{- end}}
@@ -217,7 +237,10 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				<ram:TaxTotalAmount currencyID="{{.TaxCurrencyCode}}">{{.TaxTotalInTaxCurrency}}</ram:TaxTotalAmount>
 				{{- end}}
 				<ram:GrandTotalAmount>{{.GrandTotalAmount}}</ram:GrandTotalAmount>
-				<ram:DuePayableAmount>{{.GrandTotalAmount}}</ram:DuePayableAmount>
+				{{- if .PrepaidAmount}}
+				<ram:TotalPrepaidAmount>{{.PrepaidAmount}}</ram:TotalPrepaidAmount>
+				{{- end}}
+				<ram:DuePayableAmount>{{.DuePayableAmount}}</ram:DuePayableAmount>
 			</ram:SpecifiedTradeSettlementHeaderMonetarySummation>
 			{{- if .PrecedingInvoiceReference}}
 			<ram:InvoiceReferencedDocument>
@@ -323,6 +346,7 @@ type ciiTaxLine struct {
 type ciiAllowanceCharge struct {
 	ActualAmount string
 	Reason       string
+	ReasonCode   string
 	CategoryCode string
 	HasRate      bool
 	Percent      string
@@ -370,13 +394,17 @@ type ciiData struct {
 	PeriodStart               string
 	PeriodEnd                 string
 	DocAllowances             []ciiAllowanceCharge
+	DocCharges                []ciiAllowanceCharge
 	PaymentTermsDescription   string
 	PaymentDueDate            string
 	LineTotalAmount           string
+	ChargeTotalAmount         string
 	AllowanceTotalAmount      string
 	TaxBasisTotalAmount       string
 	TaxTotalAmount            string
 	GrandTotalAmount          string
+	PrepaidAmount             string
+	DuePayableAmount          string
 	LineItems                 []ciiLineItem
 }
 
@@ -429,6 +457,10 @@ func buildCIIData(doc *invoice.Document, opts Options) (*ciiData, error) {
 
 	issueDate, err := formatDate("document date", doc.Date)
 	fail(err)
+
+	if opts.TypeCode == "" && doc.Type != invoice.Invoice && doc.Type != invoice.CreditNote {
+		fail(fmt.Errorf("%s: %w", doc.Type, ErrUnsupportedDocumentType))
+	}
 
 	currency := strings.ToUpper(strings.TrimSpace(doc.Currency.Code))
 	if !currencyCodeRe.MatchString(currency) {
@@ -554,6 +586,7 @@ func buildCIIData(doc *invoice.Document, opts Options) (*ciiData, error) {
 	d.TaxBasisTotalAmount = totals.taxBasis.StringFixed(2)
 	d.TaxTotalAmount = totals.tax.StringFixed(2)
 	d.GrandTotalAmount = totals.grand.StringFixed(2)
+	d.DuePayableAmount = totals.due.StringFixed(2)
 	if d.TaxCurrencyCode != "" {
 		rate, _ := decimal.NewFromString(opts.TaxCurrencyRate)
 		d.TaxTotalInTaxCurrency = totals.tax.Mul(rate).Round(2).StringFixed(2)
@@ -564,6 +597,13 @@ func buildCIIData(doc *invoice.Document, opts Options) (*ciiData, error) {
 		if totals.allowanceTotal.Sign() != 0 {
 			d.AllowanceTotalAmount = totals.allowanceTotal.StringFixed(2)
 		}
+		if totals.chargeTotal.Sign() != 0 {
+			d.ChargeTotalAmount = totals.chargeTotal.StringFixed(2)
+		}
+		if totals.prepaid.Sign() != 0 {
+			d.PrepaidAmount = totals.prepaid.StringFixed(2)
+		}
+		d.DocCharges = totals.charges
 		for _, g := range totals.groups {
 			d.TaxBreakdown = append(d.TaxBreakdown, ciiTaxLine{
 				TaxAmount:           g.tax.StringFixed(2),
@@ -585,7 +625,7 @@ func buildCIIData(doc *invoice.Document, opts Options) (*ciiData, error) {
 			}
 		}
 
-		if totals.grand.Sign() > 0 && d.PaymentDueDate == "" && d.PaymentTermsDescription == "" {
+		if totals.due.Sign() > 0 && d.PaymentDueDate == "" && d.PaymentTermsDescription == "" {
 			return nil, fmt.Errorf("facturx: %w", ErrMissingPaymentTerms)
 		}
 	}
@@ -649,10 +689,11 @@ type taxGroup struct {
 	exemptionReasonCode string
 	lineSum             decimal.Decimal // sum of rounded line net amounts
 	allowance           decimal.Decimal // share of the document discount
+	charge              decimal.Decimal // document charges in the group
 	tax                 decimal.Decimal
 }
 
-func (g *taxGroup) basis() decimal.Decimal { return g.lineSum.Sub(g.allowance) }
+func (g *taxGroup) basis() decimal.Decimal { return g.lineSum.Sub(g.allowance).Add(g.charge) }
 
 type lineAmounts struct {
 	tax       lineTax
@@ -662,11 +703,15 @@ type lineAmounts struct {
 type totals struct {
 	lines          []lineAmounts
 	groups         []*taxGroup
+	charges        []ciiAllowanceCharge
 	lineTotal      decimal.Decimal
 	allowanceTotal decimal.Decimal
+	chargeTotal    decimal.Decimal
 	taxBasis       decimal.Decimal
 	tax            decimal.Decimal
 	grand          decimal.Decimal
+	prepaid        decimal.Decimal
+	due            decimal.Decimal
 }
 
 // computeTotals maps the document's Breakdown onto the VAT breakdown. Every
@@ -686,9 +731,12 @@ func computeTotals(doc *invoice.Document, opts Options, profile Profile) (*total
 	t := &totals{
 		lineTotal:      bd.LineTotal,
 		allowanceTotal: bd.Allowance,
+		chargeTotal:    bd.ChargeTotal,
 		taxBasis:       bd.TaxBasis,
 		tax:            bd.Tax,
 		grand:          bd.GrandTotal,
+		prepaid:        bd.Prepaid,
+		due:            bd.DuePayable,
 	}
 
 	var errs []error
@@ -702,6 +750,21 @@ func computeTotals(doc *invoice.Document, opts Options, profile Profile) (*total
 			errs = append(errs, fmt.Errorf("item %q: %w", item.Name, ErrFixedAmountTax))
 		}
 		t.lines = append(t.lines, lineAmounts{tax: lt, lineTotal: bd.Lines[i]})
+	}
+	for _, c := range doc.Charges {
+		ct, err := resolveTax("charge "+c.Name, c.Tax, opts)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		t.charges = append(t.charges, ciiAllowanceCharge{
+			ActualAmount: c.AmountDecimal().Round(2).StringFixed(2),
+			Reason:       c.Name,
+			ReasonCode:   c.ReasonCode,
+			CategoryCode: ct.category,
+			HasRate:      ct.hasRate,
+			Percent:      ct.percent.StringFixed(2),
+		})
 	}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
@@ -719,6 +782,7 @@ func computeTotals(doc *invoice.Document, opts Options, profile Profile) (*total
 		if existing, ok := byKey[key]; ok {
 			existing.lineSum = existing.lineSum.Add(eg.lineSum)
 			existing.allowance = existing.allowance.Add(eg.allowance)
+			existing.charge = existing.charge.Add(eg.charge)
 			existing.tax = existing.tax.Add(eg.tax)
 			mergeReasons(existing, eg)
 			continue
@@ -744,6 +808,7 @@ func effectiveGroup(g *invoice.TaxGroup, opts Options) *taxGroup {
 		hasRate:   true,
 		lineSum:   g.LineTotal,
 		allowance: g.Allowance,
+		charge:    g.Charge,
 		tax:       g.Tax,
 	}
 	if g.Untaxed {

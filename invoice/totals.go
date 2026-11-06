@@ -21,7 +21,7 @@ func (doc *Document) DocumentDiscount() decimal.Decimal {
 }
 
 // TotalWithoutTax returns the taxable total: item net amounts minus the
-// document discount.
+// document discount, plus the document charges.
 func (doc *Document) TotalWithoutTax() decimal.Decimal {
 	return doc.Breakdown().TaxBasis
 }
@@ -85,4 +85,19 @@ func (doc *Document) TaxLines() []TaxLine {
 		lines = append(lines, TaxLine{Name: name, Amount: amounts[name]})
 	}
 	return lines
+}
+
+// ChargeTotal returns the sum of the rounded document-level charges.
+func (doc *Document) ChargeTotal() decimal.Decimal {
+	return doc.Breakdown().ChargeTotal
+}
+
+// PrepaidAmount returns the rounded amount already paid.
+func (doc *Document) PrepaidAmount() decimal.Decimal {
+	return doc.Breakdown().Prepaid
+}
+
+// AmountDue returns TotalWithTax minus PrepaidAmount.
+func (doc *Document) AmountDue() decimal.Decimal {
+	return doc.Breakdown().DuePayable
 }

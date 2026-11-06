@@ -33,16 +33,17 @@ var (
 	// addresses (BR-FR-02, BR-FR-23).
 	frIDRe = regexp.MustCompile(`^[A-Za-z0-9+\-_/]+$`)
 
-	frTypeCodes      = set("380", "389", "393", "501", "386", "500", "384", "471", "472", "473", "261", "262", "381", "396", "502", "503")
-	frCadres         = set("B1", "S1", "M1", "B2", "S2", "M2", "B4", "S4", "M4", "S5", "S6", "B7", "S7")
-	frPrepaidCadres  = set("B2", "S2", "M2")
-	frCreditNotes    = set("261", "381", "396", "502", "503")
-	frCorrectives    = set("384", "471", "472", "473")
-	frDeposits       = set("386", "500", "503")
-	frSelfBilling    = set("389", "501", "500", "471", "473", "261", "502")
-	frFlows          = set("B2B", "B2BINT", "B2C", "OUTOFSCOPE", "ARCHIVEONLY")
-	frMandatoryNotes = []string{"PMT", "PMD", "AAB"}
-	frVATRates       = mustDecimals("0", "10", "13", "20", "8.5", "19.6", "2.1", "5.5", "7", "20.6", "1.05", "0.9", "1.75", "9.2", "9.6")
+	frTypeCodes         = set("380", "389", "393", "501", "386", "500", "384", "471", "472", "473", "261", "262", "381", "396", "502", "503")
+	frCadres            = set("B1", "S1", "M1", "B2", "S2", "M2", "B4", "S4", "M4", "S5", "S6", "B7", "S7")
+	frPrepaidCadres     = set("B2", "S2", "M2")
+	frFinalAfterDeposit = set("B4", "S4", "M4")
+	frCreditNotes       = set("261", "381", "396", "502", "503")
+	frCorrectives       = set("384", "471", "472", "473")
+	frDeposits          = set("386", "500", "503")
+	frSelfBilling       = set("389", "501", "500", "471", "473", "261", "502")
+	frFlows             = set("B2B", "B2BINT", "B2C", "OUTOFSCOPE", "ARCHIVEONLY")
+	frMandatoryNotes    = []string{"PMT", "PMD", "AAB"}
+	frVATRates          = mustDecimals("0", "10", "13", "20", "8.5", "19.6", "2.1", "5.5", "7", "20.6", "1.05", "0.9", "1.75", "9.2", "9.6")
 )
 
 func set(values ...string) map[string]bool {
@@ -129,12 +130,23 @@ func validateFrenchRules(doc *invoice.Document, opts Options, profile Profile, d
 	}
 
 	// Document header.
-	if opts.BusinessProcessID == "" {
-		fail("BR-FR-08: BusinessProcessID must carry the cadre de facturation (B1, S1, M1, B4, S4, M4, S5, S6, B7, S7)")
-	} else if !frCadres[opts.BusinessProcessID] {
-		fail("BR-FR-08: cadre de facturation %q is not accepted", opts.BusinessProcessID)
-	} else if frPrepaidCadres[opts.BusinessProcessID] {
-		fail("cadre de facturation %q (already paid) needs a prepaid amount, which is not supported", opts.BusinessProcessID)
+	cadre := opts.BusinessProcessID
+	switch {
+	case cadre == "":
+		fail("BR-FR-08: BusinessProcessID must carry the cadre de facturation (B1, S1, M1, B2, S2, M2, B4, S4, M4, S5, S6, B7, S7)")
+	case !frCadres[cadre]:
+		fail("BR-FR-08: cadre de facturation %q is not accepted", cadre)
+	case frPrepaidCadres[cadre] && t != nil:
+		// Already paid: the prepaid amount covers the total, nothing is due,
+		// and the due date states the payment date.
+		if t.due.Sign() != 0 || !t.prepaid.Equal(t.grand) {
+			fail("BR-FR-CO-09: cadre %s (already paid) needs Prepaid equal to the total with tax, got prepaid %s for %s", cadre, t.prepaid, t.grand)
+		}
+		if d.PaymentDueDate == "" {
+			fail("BR-FR-CO-09: cadre %s (already paid) needs DueDate set to the payment date", cadre)
+		}
+	case frFinalAfterDeposit[cadre] && frDeposits[typeCode]:
+		fail("BR-FR-CO-08: cadre %s (final invoice after deposit) cannot carry deposit type %s", cadre, typeCode)
 	}
 	if !frTypeCodes[typeCode] {
 		fail("BR-FR-04: document type code %q is not accepted", typeCode)

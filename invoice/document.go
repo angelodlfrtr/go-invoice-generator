@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/shopspring/decimal"
 )
 
 // Document types.
@@ -31,6 +32,8 @@ var (
 	// ErrInvalidCurrency is returned when Currency.Code is not a three-letter
 	// ISO 4217 code or Precision is outside 0..8.
 	ErrInvalidCurrency = errors.New("invalid currency")
+	// ErrInvalidPrepaid is returned when Prepaid is not a non-negative amount.
+	ErrInvalidPrepaid = errors.New("invalid prepaid amount")
 	// ErrMissingParty is returned when Company or Customer has no name.
 	ErrMissingParty = errors.New("company and customer need a name")
 )
@@ -120,7 +123,14 @@ type Document struct {
 	// DefaultTax applies to items that have no Tax of their own.
 	DefaultTax *Tax      `json:"default_tax,omitempty"`
 	Discount   *Discount `json:"discount,omitempty"`
-	Currency   Currency  `json:"currency"`
+	// Charges are document-level charges added on top of the items (BG-21).
+	Charges []*Charge `json:"charges,omitempty"`
+	// Prepaid is the amount already paid (BT-113); the amount due is the
+	// grand total minus it.
+	Prepaid  string   `json:"prepaid,omitempty"`
+	Currency Currency `json:"currency"`
+
+	_prepaid decimal.Decimal
 }
 
 // New returns a document of the given type in EUR with two decimals.
@@ -163,7 +173,34 @@ func (d *Document) Validate() error {
 		}
 	}
 
+	for _, c := range d.Charges {
+		if err := c.Prepare(); err != nil {
+			return err
+		}
+	}
+
+	d._prepaid = decimal.Zero
+	if d.Prepaid != "" {
+		p, err := decimal.NewFromString(d.Prepaid)
+		if err != nil || p.Sign() < 0 {
+			return fmt.Errorf("%w: %q", ErrInvalidPrepaid, d.Prepaid)
+		}
+		d._prepaid = p
+	}
+
 	return nil
+}
+
+// AddCharge appends a document-level charge.
+func (d *Document) AddCharge(charge *Charge) *Document {
+	d.Charges = append(d.Charges, charge)
+	return d
+}
+
+// SetPrepaid sets the amount already paid.
+func (d *Document) SetPrepaid(amount string) *Document {
+	d.Prepaid = amount
+	return d
 }
 
 // SetType sets the document type.

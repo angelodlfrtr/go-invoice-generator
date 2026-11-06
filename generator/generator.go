@@ -16,6 +16,8 @@
 package generator
 
 import (
+	"errors"
+
 	"codeberg.org/go-pdf/fpdf"
 	"github.com/creasty/defaults"
 	"github.com/leekchan/accounting"
@@ -23,10 +25,11 @@ import (
 	"github.com/angelodlfrtr/go-invoice-generator/invoice"
 )
 
-// Generator renders one document. Create a new Generator per document: the
-// underlying PDF accumulates pages.
+// Generator renders one document. Build can be called once; a second call
+// returns ErrAlreadyBuilt because the underlying PDF accumulates pages.
 type Generator struct {
 	pdf       *fpdf.Fpdf
+	built     bool
 	translate UnicodeTranslateFunc
 
 	// Options holds labels, colours, fonts and currency formatting.
@@ -83,8 +86,15 @@ func (g *Generator) SetUnicodeTranslator(fn UnicodeTranslateFunc) *Generator {
 	return g
 }
 
+// ErrAlreadyBuilt is returned by Build when the generator already rendered a
+// document; create a new Generator per PDF.
+var ErrAlreadyBuilt = errors.New("generator already built a document, create a new one")
+
 // Build validates doc (which prepares all monetary values) and renders it.
 func (g *Generator) Build(doc *invoice.Document) (*fpdf.Fpdf, error) {
+	if g.built {
+		return nil, ErrAlreadyBuilt
+	}
 	if err := doc.Validate(); err != nil {
 		return nil, err
 	}
@@ -101,6 +111,7 @@ func (g *Generator) Build(doc *invoice.Document) (*fpdf.Fpdf, error) {
 			Decimal:   g.Options.CurrencyDecimal,
 		},
 	}
+	g.built = true
 	return r.build()
 }
 

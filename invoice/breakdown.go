@@ -7,10 +7,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// TaxGroup aggregates the items that share a tax category and rate. It is the
-// unit on which taxes are rounded, following the EN 16931 model: line amounts
-// are rounded first, the document discount is split across groups, and the tax
-// of each group is computed on its rounded basis.
+// TaxGroup aggregates the items and charges that share a tax category and
+// rate. It is the unit on which taxes are rounded, following the EN 16931
+// model: line amounts are rounded first, the document discount is split
+// across groups, and the tax of each group is computed on its rounded basis.
 type TaxGroup struct {
 	// Category is the upper-cased Tax.Category shared by the group's items.
 	// Empty when the items carry no category or no tax at all.
@@ -20,7 +20,7 @@ type TaxGroup struct {
 	// Fixed marks a group of fixed-amount taxes; Tax is then the sum of the
 	// amounts rather than a rate applied to the basis.
 	Fixed bool
-	// Untaxed marks the items that have no Tax.
+	// Untaxed marks the items and charges that have no Tax.
 	Untaxed bool
 	// ExemptionReason and ExemptionReasonCode are taken from the first item
 	// of the group that sets them.
@@ -31,6 +31,8 @@ type TaxGroup struct {
 	LineTotal decimal.Decimal
 	// Allowance is the group's rounded share of the document discount.
 	Allowance decimal.Decimal
+	// Charge is the sum of the rounded document charges in the group.
+	Charge decimal.Decimal
 	// Tax is the group's rounded tax amount.
 	Tax decimal.Decimal
 
@@ -39,33 +41,39 @@ type TaxGroup struct {
 	nameTax   map[string]decimal.Decimal // fixed groups: tax per Tax.Name
 }
 
-// Basis returns the taxable amount of the group: LineTotal minus Allowance.
+// Basis returns the taxable amount of the group: LineTotal - Allowance + Charge.
 func (g *TaxGroup) Basis() decimal.Decimal {
-	return g.LineTotal.Sub(g.Allowance)
+	return g.LineTotal.Sub(g.Allowance).Add(g.Charge)
 }
 
 // Breakdown holds every monetary total of a document, computed once with
 // consistent rounding so that:
 //
-//	LineTotal  = sum of Lines
-//	Allowance  = sum of group allowances
-//	TaxBasis   = LineTotal - Allowance = sum of group bases
-//	Tax        = sum of group taxes
-//	GrandTotal = TaxBasis + Tax
+//	LineTotal   = sum of Lines
+//	Allowance   = sum of group allowances
+//	ChargeTotal = sum of group charges
+//	TaxBasis    = LineTotal - Allowance + ChargeTotal = sum of group bases
+//	Tax         = sum of group taxes
+//	GrandTotal  = TaxBasis + Tax
+//	DuePayable  = GrandTotal - Prepaid
 //
-// These are the identities required by EN 16931 (BR-CO-10, 11, 13, 14, 15),
-// so an e-invoice derived from a Breakdown always matches the PDF.
+// These are the identities required by EN 16931 (BR-CO-10 to 16), so an
+// e-invoice derived from a Breakdown always matches the PDF.
 type Breakdown struct {
 	// Lines holds the rounded net amount of each item, in document order.
 	Lines []decimal.Decimal
-	// Groups are sorted by category then rate; fixed-amount taxes come last.
+	// Groups are sorted by category then rate; untaxed, then fixed-amount
+	// taxes come last.
 	Groups []*TaxGroup
 
-	LineTotal  decimal.Decimal
-	Allowance  decimal.Decimal
-	TaxBasis   decimal.Decimal
-	Tax        decimal.Decimal
-	GrandTotal decimal.Decimal
+	LineTotal   decimal.Decimal
+	Allowance   decimal.Decimal
+	ChargeTotal decimal.Decimal
+	TaxBasis    decimal.Decimal
+	Tax         decimal.Decimal
+	GrandTotal  decimal.Decimal
+	Prepaid     decimal.Decimal
+	DuePayable  decimal.Decimal
 }
 
 var hundred = decimal.NewFromInt(100)
@@ -83,39 +91,31 @@ func (doc *Document) precision() int32 {
 	return int32(p)
 }
 
-// Breakdown computes the document totals. Items must have been prepared by
-// Validate (called by Build) first.
+// groupKey identifies the tax group of a Tax: untaxed, fixed, or category+rate.
+func groupKey(t *Tax) string {
+	switch {
+	case t == nil:
+		return "untaxed"
+	case len(t.Amount) > 0:
+		return "fixed"
+	default:
+		return "rate|" + strings.ToUpper(strings.TrimSpace(t.Category)) + "|" + t._percent.String()
+	}
+}
+
+// Breakdown computes the document totals. Items and charges must have been
+// prepared by Validate (called by the generator's Build) first.
 //
-// Amounts are rounded to Currency.Precision at three points: each
-// item's net amount, each group's share of the document discount and each
+// Amounts are rounded to Currency.Precision at four points: each item's net
+// amount, each charge, each group's share of the document discount and each
 // group's tax. Totals are sums of those rounded parts, never rounded sums.
 func (doc *Document) Breakdown() *Breakdown {
 	prec := doc.precision()
 	bd := &Breakdown{Lines: make([]decimal.Decimal, len(doc.Items))}
 	byKey := map[string]*TaxGroup{}
 
-	for i, item := range doc.Items {
-		line := item.TotalWithoutTaxAndWithDiscount().Round(prec)
-		bd.Lines[i] = line
-		bd.LineTotal = bd.LineTotal.Add(line)
-
-		var (
-			key  string
-			name string
-			g    *TaxGroup
-		)
-		switch {
-		case item.Tax == nil:
-			key = "untaxed"
-		case len(item.Tax.Amount) > 0:
-			key = "fixed"
-			name = item.Tax.Name
-		default:
-			category := strings.ToUpper(strings.TrimSpace(item.Tax.Category))
-			key = "rate|" + category + "|" + item.Tax._percent.String()
-			name = item.Tax.Name
-		}
-
+	group := func(t *Tax) *TaxGroup {
+		key := groupKey(t)
 		g, ok := byKey[key]
 		if !ok {
 			g = &TaxGroup{
@@ -123,33 +123,57 @@ func (doc *Document) Breakdown() *Breakdown {
 				nameTax:   map[string]decimal.Decimal{},
 			}
 			switch {
-			case item.Tax == nil:
+			case t == nil:
 				g.Untaxed = true
-			case len(item.Tax.Amount) > 0:
+			case len(t.Amount) > 0:
 				g.Fixed = true
 			default:
-				g.Category = strings.ToUpper(strings.TrimSpace(item.Tax.Category))
-				g.Percent = item.Tax._percent
+				g.Category = strings.ToUpper(strings.TrimSpace(t.Category))
+				g.Percent = t._percent
 			}
 			byKey[key] = g
 			bd.Groups = append(bd.Groups, g)
 		}
-
-		g.LineTotal = g.LineTotal.Add(line)
-		if item.Tax != nil {
+		if t != nil {
 			if g.ExemptionReason == "" {
-				g.ExemptionReason = item.Tax.ExemptionReason
+				g.ExemptionReason = t.ExemptionReason
 			}
 			if g.ExemptionReasonCode == "" {
-				g.ExemptionReasonCode = item.Tax.ExemptionReasonCode
+				g.ExemptionReasonCode = t.ExemptionReasonCode
 			}
-			if _, seen := g.nameBasis[name]; !seen {
-				g.names = append(g.names, name)
-			}
-			g.nameBasis[name] = g.nameBasis[name].Add(line)
+		}
+		return g
+	}
+
+	addName := func(g *TaxGroup, name string, basis decimal.Decimal) {
+		if _, seen := g.nameBasis[name]; !seen {
+			g.names = append(g.names, name)
+		}
+		g.nameBasis[name] = g.nameBasis[name].Add(basis)
+	}
+
+	for i, item := range doc.Items {
+		line := item.TotalWithoutTaxAndWithDiscount().Round(prec)
+		bd.Lines[i] = line
+		bd.LineTotal = bd.LineTotal.Add(line)
+
+		g := group(item.Tax)
+		g.LineTotal = g.LineTotal.Add(line)
+		if item.Tax != nil {
+			addName(g, item.Tax.Name, line)
 			if g.Fixed {
-				g.nameTax[name] = g.nameTax[name].Add(item.Tax._amount.Round(prec))
+				g.nameTax[item.Tax.Name] = g.nameTax[item.Tax.Name].Add(item.Tax._amount.Round(prec))
 			}
+		}
+	}
+
+	for _, c := range doc.Charges {
+		amount := c._amount.Round(prec)
+		bd.ChargeTotal = bd.ChargeTotal.Add(amount)
+		g := group(c.Tax)
+		g.Charge = g.Charge.Add(amount)
+		if c.Tax != nil {
+			addName(g, c.Tax.Name, amount)
 		}
 	}
 
@@ -207,6 +231,8 @@ func (doc *Document) Breakdown() *Breakdown {
 		bd.Tax = bd.Tax.Add(g.Tax)
 	}
 	bd.GrandTotal = bd.TaxBasis.Add(bd.Tax)
+	bd.Prepaid = doc._prepaid.Round(prec)
+	bd.DuePayable = bd.GrandTotal.Sub(bd.Prepaid)
 
 	return bd
 }
@@ -223,7 +249,7 @@ func (g *TaxGroup) taxByName(prec int32) map[string]decimal.Decimal {
 		}
 		return out
 	}
-	if g.Untaxed || len(g.names) == 0 || g.LineTotal.Sign() == 0 {
+	if g.Untaxed || len(g.names) == 0 {
 		return out
 	}
 	if len(g.names) == 1 {
@@ -231,10 +257,18 @@ func (g *TaxGroup) taxByName(prec int32) map[string]decimal.Decimal {
 		return out
 	}
 
+	var total decimal.Decimal
+	for _, n := range g.names {
+		total = total.Add(g.nameBasis[n])
+	}
+	if total.Sign() == 0 {
+		return out
+	}
+
 	var allocated decimal.Decimal
 	largest := g.names[0]
 	for _, n := range g.names {
-		share := g.Tax.Mul(g.nameBasis[n]).Div(g.LineTotal).Round(prec)
+		share := g.Tax.Mul(g.nameBasis[n]).Div(total).Round(prec)
 		out[n] = share
 		allocated = allocated.Add(share)
 		if g.nameBasis[n].Cmp(g.nameBasis[largest]) > 0 {
@@ -244,3 +278,7 @@ func (g *TaxGroup) taxByName(prec int32) map[string]decimal.Decimal {
 	out[largest] = out[largest].Add(g.Tax.Sub(allocated))
 	return out
 }
+
+// RoundingPrecision returns Currency.Precision clamped to the range used for
+// rounding, as an int32 ready for decimal.Round.
+func (doc *Document) RoundingPrecision() int32 { return doc.precision() }

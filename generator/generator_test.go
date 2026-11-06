@@ -1,6 +1,8 @@
 package generator
 
 import (
+	"github.com/angelodlfrtr/go-invoice-generator/invoice"
+
 	"errors"
 	"os"
 	"testing"
@@ -245,5 +247,33 @@ func TestNew(t *testing.T) {
 	err = pdf.OutputFileAndClose("../out/invoice.pdf")
 	if err != nil {
 		t.Errorf("%v", err.Error())
+	}
+}
+
+func TestBuildOnce(t *testing.T) {
+	doc, err := invoice.New(invoice.Invoice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.SetRef("ONCE").SetDate("01/01/2024")
+	doc.SetCompany(&invoice.Contact{Name: "A", Address: &invoice.Address{Address: "x"}})
+	doc.SetCustomer(&invoice.Contact{Name: "B", Address: &invoice.Address{Address: "y"}})
+	doc.AppendItem(&invoice.Item{Name: "a", UnitCost: "10", Quantity: "1", Tax: &invoice.Tax{Percent: "20"}})
+	doc.AddCharge(&invoice.Charge{Name: "Shipping", Amount: "5", ReasonCode: "FC", Tax: &invoice.Tax{Percent: "20"}})
+	doc.SetPrepaid("6")
+
+	gen := NewGenerator(nil)
+	pdf, err := gen.Build(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll("../out", 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := pdf.OutputFileAndClose("../out/invoice_charges.pdf"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gen.Build(doc); !errors.Is(err, ErrAlreadyBuilt) {
+		t.Fatalf("second Build: got %v, want ErrAlreadyBuilt", err)
 	}
 }

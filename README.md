@@ -7,7 +7,7 @@ exporter validated against the European and French rule sets.
 ## Features
 
 - Four document types: Invoice, Quotation, Delivery Note, Credit Note
-- Per-item tax and discount (percentage or fixed amount), document-level discount, default tax
+- Per-item tax and discount (percentage or fixed amount), document-level discount and charges, prepayments, default tax
 - Named taxes with a per-name breakdown in the totals block
 - EN 16931 rounding model: totals are sums of rounded parts, identical on the PDF and in the e-invoice
 - Party identifiers (VAT number, SIREN, electronic address, contact person), delivery, payment instructions and preceding invoice, printed on the PDF and exported
@@ -15,6 +15,7 @@ exporter validated against the European and French rule sets.
 - Unicode support via a configurable translation function; Roboto embedded by default
 - Output to file or `[]byte`
 - [Factur-X](#factur-x) subpackage producing PDF/A-3B e-invoices for all five profiles, with a French e-invoicing mode, verified with veraPDF and mustangproject (EN 16931 and BR-FR schematrons)
+- Reception: extract and parse a received Factur-X / ZUGFeRD PDF back into a document and verify its totals
 
 ---
 
@@ -179,6 +180,11 @@ doc.SetDelivery(&invoice.Delivery{      // delivery (BG-13, BG-14)
 
 doc.SetPrecedingInvoice("INV-2023-120", "2023-12-01") // for credit notes (BG-3)
 
+doc.AddCharge(&invoice.Charge{                // document-level charge (BG-21)
+	Name: "Shipping", Amount: "15.00", ReasonCode: "FC", Tax: &invoice.Tax{Percent: "20"},
+})
+doc.SetPrepaid("100.00")                      // already paid (BT-113); the amount due nets it
+
 doc.SetNotes("Thank you for your business.")           // one note, basic HTML allowed
 doc.AddNote("Pas d'escompte pour paiement anticipé", "AAB") // note with UNTDID 4451 subject code
 ```
@@ -314,7 +320,10 @@ fmt.Println(doc.TotalWithoutTaxAndWithoutDocumentDiscount()) // sum of item subt
 fmt.Println(doc.DocumentDiscount())                         // document discount amount
 fmt.Println(doc.TotalWithoutTax())                          // above minus document discount
 fmt.Println(doc.Tax())                                      // total tax
-fmt.Println(doc.TotalWithTax())                             // amount due
+fmt.Println(doc.ChargeTotal())                              // document-level charges
+fmt.Println(doc.TotalWithTax())                             // grand total
+fmt.Println(doc.PrepaidAmount())                            // already paid
+fmt.Println(doc.AmountDue())                                // grand total minus prepaid
 fmt.Println(doc.TaxLines())                                 // per-name tax lines, nil when no tax is named
 ```
 
@@ -337,12 +346,12 @@ fmt.Println(item.TotalWithTaxAndDiscount())           // 180.00
 Totals follow the EN 16931 model used by accounting software and e-invoicing
 validators. Amounts are rounded to `Currency.Precision` at three points:
 
-1. each item's net amount after its own discount;
+1. each item's net amount after its own discount, and each document charge;
 2. the document discount, which is then split across tax groups in proportion to
    their line totals (the rounding residual goes to the largest group);
 3. each tax group's tax, computed on the group's rounded taxable amount.
 
-A tax group is the set of items sharing a `Tax.Category` and rate; fixed-amount
+A tax group is the set of items and charges sharing a `Tax.Category` and rate; fixed-amount
 taxes and untaxed items form their own groups. Every total is a sum of those
 rounded parts, never a rounded sum, so the totals block, the per-name tax lines
 and any Factur-X export derived from the document agree to the cent.
@@ -413,7 +422,7 @@ gen := generator.NewGenerator(&generator.Options{
 })
 ```
 
-A `Generator` renders one document: create a new one per PDF.
+A `Generator` renders one document: create a new one per PDF. A second `Build` returns `ErrAlreadyBuilt`.
 
 ---
 
@@ -535,6 +544,8 @@ os.WriteFile("invoice_facturx.pdf", result, 0644)
 
 Document data belonging to a higher profile than the one selected is silently omitted from the XML.
 
+Only invoices and credit notes have an e-invoice representation; a quotation or delivery note is rejected with `ErrUnsupportedDocumentType` unless `Options.TypeCode` is set explicitly.
+
 ### What comes from the document
 
 | Document field                                            | EN 16931                                        |
@@ -557,6 +568,7 @@ Document data belonging to a higher profile than the one selected is silently om
 
 - **VAT breakdown.** Items are grouped by VAT category and rate (BR-CO-18). The category comes from `Tax.Category`, falling back to `TaxCategoryCode` (default `"S"`). Items without a `Tax` use `NoTaxCategoryCode` (default `"E"`, exempt) and must be given a reason through `NoTaxExemptionReason` or `NoTaxExemptionReasonCode`.
 - **Document discount.** `doc.Discount` becomes one document-level allowance per VAT group (reason code `95`), split in proportion to each group's line total.
+- **Charges.** Each `doc.Charges` entry becomes a document-level charge (BG-21) with its reason code, VAT category and rate, and joins the VAT group of its tax.
 - **Totals.** Every amount comes from `doc.Breakdown()`, the same figures printed on the PDF (see [Rounding model](#rounding-model)), so the XML matches the PDF to the cent and the EN 16931 arithmetic rules hold exactly (BR-CO-10, 11, 13, 14, 15). Amounts carry two decimals, so a currency precision above 2 is rejected.
 - **Fixed-amount taxes** (`Tax.Amount`) have no VAT representation. They are accepted for MINIMUM, which carries no breakdown, and rejected with `ErrFixedAmountTax` above it; model such charges as separate items instead.
 
@@ -579,13 +591,14 @@ Document data belonging to a higher profile than the one selected is silently om
 | `ErrInvalidVATPointDateCode` | `VATPointDateCode` is not `5`, `29` or `72`                                              |
 | `ErrInvalidTaxCurrency`      | Tax currency malformed, equal to the invoice currency, or without a positive rate        |
 | `ErrUnsupportedPrecision`    | `Currency.Precision` is above 2                                                          |
+| `ErrUnsupportedDocumentType` | The document is a quotation or delivery note and no `TypeCode` override is given         |
 | `ErrFrenchRules`             | `FrenchRules` is set and a French requirement is broken                                  |
 
 ### French e-invoicing
 
 Set `FrenchRules: true` to produce documents for the French e-invoicing reform (AFNOR XP Z12-012, "Flux 2"). On top of EN 16931 the library then:
 
-- requires profile `EN 16931` or `EXTENDED`, a company in France with its SIREN in `LegalID` (scheme `"0002"`), and `BusinessProcessID` set to the cadre de facturation (`B1`, `S1`, `M1`, `B4`, `S4`, `M4`, `S5`, `S6`, `B7`, `S7`);
+- requires profile `EN 16931` or `EXTENDED`, a company in France with its SIREN in `LegalID` (scheme `"0002"`), and `BusinessProcessID` set to the cadre de facturation (`B1`, `S1`, `M1`, `B2`, `S2`, `M2`, `B4`, `S4`, `M4`, `S5`, `S6`, `B7`, `S7`); an already-paid cadre (`B2`, `S2`, `M2`) needs `Prepaid` equal to the total and a `DueDate`, and a final invoice after deposit (`B4`, `S4`, `M4`) cannot be a deposit invoice;
 - requires the three legal mentions as notes with subject codes `PMD` (pénalités de retard), `PMT` (indemnité forfaitaire de recouvrement) and `AAB` (escompte ou absence d'escompte), each exactly once; they are printed on the PDF like any note;
 - adds a `BAR` note carrying `FrenchFlow` (`B2B` by default) and, for `B2B`, requires the customer's SIREN;
 - defaults the electronic addresses to the SIREN with the French routing scheme `"0225"` when none is given, and rejects e-mail style addresses;
@@ -617,6 +630,30 @@ result, err := facturx.Attach(pdfBytes, doc, facturx.Options{
 ```
 
 Violations are reported before any XML is produced and wrap `ErrFrenchRules`. The test suite validates the French fixture with mustangproject 2.26+, which applies the official BR-FR schematron when both parties are in France. Transmission through an accredited platform, e-reporting and archiving remain outside the library's scope.
+
+### Reading received invoices
+
+The reception side mirrors the writer: `Extract` pulls the XML out of a Factur-X / ZUGFeRD 2 PDF, `Parse` turns the CII XML into an `invoice.Document` plus the Factur-X metadata and the totals exactly as the sender stated them, and `Read` does both.
+
+```go
+p, err := facturx.Read(pdfBytes)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Println(p.Profile, p.TypeCode, p.BusinessProcessID, p.FrenchFlow)
+fmt.Println(p.Document.Ref, p.Document.Company.VATID, p.Totals.DuePayable)
+
+// Recompute the totals from the parsed lines and compare them with the stated ones.
+if err := p.Verify(); err != nil {
+    log.Fatal(err) // wraps facturx.ErrTotalsMismatch
+}
+
+// The parsed document renders and exports like any other.
+pdf, _ := generator.NewGenerator(nil).Build(p.Document)
+```
+
+`Parse` accepts every profile. Below BASIC the XML carries no lines, so `Document.Items` is empty and `Verify` only checks the identities between the stated totals. Document-level allowances collapse into `Document.Discount`; charges, prepaid amount, parties, delivery, payment, notes and the preceding invoice are restored field by field. A French `BAR` note is reported as `FrenchFlow` rather than kept as a note, so the document can be re-exported under `FrenchRules`.
 
 ### Options
 
