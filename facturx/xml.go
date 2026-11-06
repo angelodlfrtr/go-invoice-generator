@@ -20,6 +20,7 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryInvoice
 	xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
 	xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"
+	xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100"
 	xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
 	<rsm:ExchangedDocumentContext>
 		{{- if .BusinessProcessID}}
@@ -39,7 +40,10 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 		</ram:IssueDateTime>
 		{{- range .Notes}}
 		<ram:IncludedNote>
-			<ram:Content>{{xe .}}</ram:Content>
+			<ram:Content>{{xe .Content}}</ram:Content>
+			{{- if .SubjectCode}}
+			<ram:SubjectCode>{{xe .SubjectCode}}</ram:SubjectCode>
+			{{- end}}
 		</ram:IncludedNote>
 		{{- end}}
 	</rsm:ExchangedDocument>
@@ -102,13 +106,20 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 			</ram:BuyerOrderReferencedDocument>
 			{{- end}}
 		</ram:ApplicableHeaderTradeAgreement>
-		{{- if .DeliveryDate}}
+		{{- if or .ShipTo .DeliveryDate}}
 		<ram:ApplicableHeaderTradeDelivery>
+			{{- if .ShipTo}}
+			<ram:ShipToTradeParty>
+				{{- template "party" .ShipTo}}
+			</ram:ShipToTradeParty>
+			{{- end}}
+			{{- if .DeliveryDate}}
 			<ram:ActualDeliverySupplyChainEvent>
 				<ram:OccurrenceDateTime>
 					<udt:DateTimeString format="102">{{.DeliveryDate}}</udt:DateTimeString>
 				</ram:OccurrenceDateTime>
 			</ram:ActualDeliverySupplyChainEvent>
+			{{- end}}
 		</ram:ApplicableHeaderTradeDelivery>
 		{{- else}}
 		<ram:ApplicableHeaderTradeDelivery/>
@@ -116,6 +127,9 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 		<ram:ApplicableHeaderTradeSettlement>
 			{{- if .PaymentReference}}
 			<ram:PaymentReference>{{xe .PaymentReference}}</ram:PaymentReference>
+			{{- end}}
+			{{- if .TaxCurrencyCode}}
+			<ram:TaxCurrencyCode>{{.TaxCurrencyCode}}</ram:TaxCurrencyCode>
 			{{- end}}
 			<ram:InvoiceCurrencyCode>{{.CurrencyCode}}</ram:InvoiceCurrencyCode>
 			{{- if .PaymentMeansCode}}
@@ -144,6 +158,9 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				<ram:CategoryCode>{{.CategoryCode}}</ram:CategoryCode>
 				{{- if .ExemptionReasonCode}}
 				<ram:ExemptionReasonCode>{{xe .ExemptionReasonCode}}</ram:ExemptionReasonCode>
+				{{- end}}
+				{{- if $.VATPointDateCode}}
+				<ram:DueDateTypeCode>{{$.VATPointDateCode}}</ram:DueDateTypeCode>
 				{{- end}}
 				{{- if .HasRate}}
 				<ram:RateApplicablePercent>{{.Percent}}</ram:RateApplicablePercent>
@@ -196,9 +213,22 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				{{- end}}
 				<ram:TaxBasisTotalAmount>{{.TaxBasisTotalAmount}}</ram:TaxBasisTotalAmount>
 				<ram:TaxTotalAmount currencyID="{{.CurrencyCode}}">{{.TaxTotalAmount}}</ram:TaxTotalAmount>
+				{{- if .TaxCurrencyCode}}
+				<ram:TaxTotalAmount currencyID="{{.TaxCurrencyCode}}">{{.TaxTotalInTaxCurrency}}</ram:TaxTotalAmount>
+				{{- end}}
 				<ram:GrandTotalAmount>{{.GrandTotalAmount}}</ram:GrandTotalAmount>
 				<ram:DuePayableAmount>{{.GrandTotalAmount}}</ram:DuePayableAmount>
 			</ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+			{{- if .PrecedingInvoiceReference}}
+			<ram:InvoiceReferencedDocument>
+				<ram:IssuerAssignedID>{{xe .PrecedingInvoiceReference}}</ram:IssuerAssignedID>
+				{{- if .PrecedingInvoiceDate}}
+				<ram:FormattedIssueDateTime>
+					<qdt:DateTimeString format="102">{{.PrecedingInvoiceDate}}</qdt:DateTimeString>
+				</ram:FormattedIssueDateTime>
+				{{- end}}
+			</ram:InvoiceReferencedDocument>
+			{{- end}}
 		</ram:ApplicableHeaderTradeSettlement>
 	</rsm:SupplyChainTradeTransaction>
 </rsm:CrossIndustryInvoice>
@@ -313,35 +343,41 @@ type ciiLineItem struct {
 }
 
 type ciiData struct {
-	GuidelineID             string
-	BusinessProcessID       string
-	TypeCode                string
-	ID                      string
-	IssueDate               string
-	Notes                   []string
-	BuyerReference          string
-	PurchaseOrderReference  string
-	Seller                  ciiParty
-	Buyer                   ciiParty
-	DeliveryDate            string
-	CurrencyCode            string
-	PaymentReference        string
-	PaymentMeansCode        string
-	PaymentIBAN             string
-	PaymentBIC              string
-	TaxBreakdown            []ciiTaxLine
-	PeriodStart             string
-	PeriodEnd               string
-	DocAllowances           []ciiAllowanceCharge
-	PaymentTermsDescription string
-	PaymentDueDate          string
-	LineTotalAmount         string
-	AllowanceTotalAmount    string
-	TaxBasisTotalAmount     string
-	TaxTotalAmount          string
-	GrandTotalAmount        string
-	UnitCode                string
-	LineItems               []ciiLineItem
+	GuidelineID               string
+	BusinessProcessID         string
+	TypeCode                  string
+	ID                        string
+	IssueDate                 string
+	Notes                     []Note
+	BuyerReference            string
+	PurchaseOrderReference    string
+	Seller                    ciiParty
+	Buyer                     ciiParty
+	ShipTo                    *ciiParty
+	DeliveryDate              string
+	CurrencyCode              string
+	TaxCurrencyCode           string
+	TaxTotalInTaxCurrency     string
+	VATPointDateCode          string
+	PrecedingInvoiceReference string
+	PrecedingInvoiceDate      string
+	PaymentReference          string
+	PaymentMeansCode          string
+	PaymentIBAN               string
+	PaymentBIC                string
+	TaxBreakdown              []ciiTaxLine
+	PeriodStart               string
+	PeriodEnd                 string
+	DocAllowances             []ciiAllowanceCharge
+	PaymentTermsDescription   string
+	PaymentDueDate            string
+	LineTotalAmount           string
+	AllowanceTotalAmount      string
+	TaxBasisTotalAmount       string
+	TaxTotalAmount            string
+	GrandTotalAmount          string
+	UnitCode                  string
+	LineItems                 []ciiLineItem
 }
 
 var ciiTmpl = template.Must(
@@ -376,6 +412,7 @@ func BuildXML(doc *generator.Document, opts Options) ([]byte, error) {
 }
 
 func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
+	opts = applyFrenchDefaults(opts)
 	profile := opts.profile()
 	minimum := profile == ProfileMinimum
 	basicWLPlus := !minimum
@@ -412,7 +449,10 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	}
 
 	if basicWLPlus {
-		d.Notes = opts.notes(doc)
+		d.Notes = append(d.Notes, opts.notes(doc)...)
+		if opts.FrenchRules {
+			d.Notes = append(d.Notes, Note{Content: opts.frenchFlow(), SubjectCode: "BAR"})
+		}
 	}
 
 	// ---- Parties ----
@@ -473,6 +513,39 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 		d.PeriodEnd, err = optionalDate("invoicing period end", opts.InvoicingPeriodEnd)
 		fail(err)
 
+		if opts.hasShipTo() {
+			shipToCountry, cerr := normalizeCountry("ship-to country", opts.shipToCountryCode(), true)
+			fail(cerr)
+			d.ShipTo = &ciiParty{
+				Name:    opts.ShipToName,
+				Address: buildAddress(opts.ShipToAddress, shipToCountry, false),
+			}
+		}
+
+		if opts.VATPointDateCode != "" {
+			if !vatPointDateCodes[opts.VATPointDateCode] {
+				fail(fmt.Errorf("%q: %w", opts.VATPointDateCode, ErrInvalidVATPointDateCode))
+			}
+			d.VATPointDateCode = opts.VATPointDateCode
+		}
+
+		if opts.TaxCurrencyCode != "" {
+			d.TaxCurrencyCode = strings.ToUpper(strings.TrimSpace(opts.TaxCurrencyCode))
+			switch {
+			case !currencyCodeRe.MatchString(d.TaxCurrencyCode):
+				fail(fmt.Errorf("tax currency %q: %w", d.TaxCurrencyCode, ErrInvalidTaxCurrency))
+			case d.TaxCurrencyCode == currency:
+				fail(fmt.Errorf("tax currency equals the invoice currency %s: %w", currency, ErrInvalidTaxCurrency))
+			}
+			if rate, rerr := decimal.NewFromString(opts.TaxCurrencyRate); rerr != nil || rate.Sign() <= 0 {
+				fail(fmt.Errorf("tax currency rate %q must be a positive number: %w", opts.TaxCurrencyRate, ErrInvalidTaxCurrency))
+			}
+		}
+
+		d.PrecedingInvoiceReference = opts.PrecedingInvoiceReference
+		d.PrecedingInvoiceDate, err = optionalDate("preceding invoice date", opts.PrecedingInvoiceDate)
+		fail(err)
+
 		d.PaymentReference = opts.PaymentReference
 		d.PaymentMeansCode = opts.paymentMeansCode()
 		d.PaymentIBAN = opts.PaymentIBAN
@@ -496,6 +569,10 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	totals, err := computeTotals(doc, opts, profile)
 	fail(err)
 
+	if opts.FrenchRules {
+		errs = append(errs, validateFrenchRules(doc, opts, profile, d, sellerCountry, buyerCountry, totals)...)
+	}
+
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("facturx: %w", errors.Join(errs...))
 	}
@@ -503,6 +580,10 @@ func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
 	d.TaxBasisTotalAmount = totals.taxBasis.StringFixed(2)
 	d.TaxTotalAmount = totals.tax.StringFixed(2)
 	d.GrandTotalAmount = totals.grand.StringFixed(2)
+	if d.TaxCurrencyCode != "" {
+		rate, _ := decimal.NewFromString(opts.TaxCurrencyRate)
+		d.TaxTotalInTaxCurrency = totals.tax.Mul(rate).Round(2).StringFixed(2)
+	}
 
 	if basicWLPlus {
 		d.LineTotalAmount = totals.lineTotal.StringFixed(2)

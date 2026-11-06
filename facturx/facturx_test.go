@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -15,6 +16,10 @@ import (
 )
 
 var hundred = decimal.NewFromInt(100)
+
+// frRuleRe matches a French BR-FR rule reported inside a warning or error
+// element (the mustang log also mentions the schematron file name).
+var frRuleRe = regexp.MustCompile(`<(warning|error)[^>]*>\s*BR-FR`)
 
 var allProfiles = []Profile{
 	ProfileMinimum,
@@ -170,7 +175,96 @@ func fullOptions(profile Profile) Options {
 		NoTaxExemptionReason:            "VAT not applicable, art. 293 B CGI",
 		DocumentDiscountReason:          "Loyalty discount",
 		SellerElectronicAddressSchemeID: "EM",
+		VATPointDateCode:                "5",
+		ShipToName:                      "John Doe Warehouse",
+		ShipToAddress: &generator.Address{
+			Address:    "7 Industrial Way",
+			PostalCode: "07001",
+			City:       "Newark",
+			Country:    "US",
+		},
 	}
+}
+
+// buildFrenchDoc is a credit note between two French companies.
+func buildFrenchDoc(t *testing.T) *generator.Document {
+	t.Helper()
+	doc := newTestDoc(t)
+	doc.SetRef("AV-2024-001")
+	doc.SetCustomer(&generator.Contact{
+		Name: "Client SARL",
+		Address: &generator.Address{
+			Address:    "5 Rue de la République",
+			PostalCode: "69001",
+			City:       "Lyon",
+			Country:    "FR",
+		},
+	})
+	doc.AppendItem(&generator.Item{
+		Name:     "Consulting (refund)",
+		UnitCost: "150.00",
+		Quantity: "2",
+		Tax:      &generator.Tax{Percent: "20"},
+	})
+	doc.AppendItem(&generator.Item{
+		Name:     "Training (refund)",
+		UnitCost: "100.00",
+		Quantity: "1",
+		Tax: &generator.Tax{
+			Percent:         "0",
+			Category:        "E",
+			ExemptionReason: "TVA non applicable, art. 261-4-4 du CGI",
+		},
+	})
+	return doc
+}
+
+func frenchOptions(profile Profile) Options {
+	return Options{
+		Profile:                   profile,
+		FrenchRules:               true,
+		TypeCode:                  "381",
+		BusinessProcessID:         "S1",
+		SellerTaxID:               "FR12345678901",
+		SellerLegalID:             "123456789",
+		SellerLegalIDSchemeID:     "0002",
+		SellerCountryCode:         "FR",
+		BuyerTaxID:                "FR98765432109",
+		BuyerLegalID:              "987654321",
+		BuyerLegalIDSchemeID:      "0002",
+		BuyerCountryCode:          "FR",
+		PrecedingInvoiceReference: "INV-2023-120",
+		PrecedingInvoiceDate:      "2023-12-01",
+		VATPointDateCode:          "72",
+		PaymentDueDate:            "20240201",
+		PaymentTermsDescription:   "Remboursement sous 30 jours",
+		Notes:                     frenchNotes(),
+		ShipToName:                "Client SARL - Entrepôt",
+		ShipToAddress: &generator.Address{
+			Address:    "ZI des Chênes",
+			PostalCode: "69800",
+			City:       "Saint-Priest",
+			Country:    "FR",
+		},
+	}
+}
+
+// frenchNotes are the three legal mentions French invoices must carry.
+func frenchNotes() []Note {
+	return []Note{
+		{Content: "Pénalités de retard : 3 fois le taux d'intérêt légal", SubjectCode: "PMD"},
+		{Content: "Indemnité forfaitaire pour frais de recouvrement : 40 €", SubjectCode: "PMT"},
+		{Content: "Pas d'escompte pour paiement anticipé", SubjectCode: "AAB"},
+	}
+}
+
+// usdOptions invoices in USD with the VAT total also given in EUR.
+func usdOptions(profile Profile) Options {
+	o := simpleOptions(profile)
+	o.CurrencyCode = "USD"
+	o.TaxCurrencyCode = "EUR"
+	o.TaxCurrencyRate = "0.9234"
+	return o
 }
 
 func simpleOptions(profile Profile) Options {
@@ -218,13 +312,21 @@ func fixtures(t *testing.T, profile Profile) map[string]struct {
 	opts Options
 } {
 	t.Helper()
-	return map[string]struct {
+	type fixture = struct {
 		doc  *generator.Document
 		opts Options
-	}{
+	}
+	fx := map[string]fixture{
 		"facturx":      {buildTestDoc(t), simpleOptions(profile)},
 		"facturx_full": {buildFullTestDoc(t), fullOptions(profile)},
 	}
+	if profile != ProfileMinimum {
+		fx["facturx_usd"] = fixture{buildTestDoc(t), usdOptions(profile)}
+	}
+	if profile == ProfileEN16931 || profile == ProfileExtended {
+		fx["facturx_fr"] = fixture{buildFrenchDoc(t), frenchOptions(profile)}
+	}
+	return fx
 }
 
 func TestAttach(t *testing.T) {
@@ -284,6 +386,11 @@ func TestMustangValidation(t *testing.T) {
 				if strings.Contains(string(out), `status="invalid"`) || strings.Contains(string(out), "<error") {
 					t.Fatalf("profile %s not valid:\n%s", profile, out)
 				}
+				// mustang >= 2.26 reports the French BR-FR rules as warnings when
+				// both parties are in France; treat them as failures.
+				if frRuleRe.Match(out) {
+					t.Fatalf("profile %s breaks French rules:\n%s", profile, out)
+				}
 				if !strings.Contains(string(out), `status="valid"`) {
 					t.Fatalf("profile %s: no valid summary found:\n%s", profile, out)
 				}
@@ -322,6 +429,7 @@ type xmlTradeTax struct {
 	BasisAmount      string `xml:"BasisAmount"`
 	CategoryCode     string `xml:"CategoryCode"`
 	ExemptionReason  string `xml:"ExemptionReason"`
+	DueDateTypeCode  string `xml:"DueDateTypeCode"`
 	Rate             string `xml:"RateApplicablePercent"`
 }
 
@@ -344,19 +452,41 @@ type xmlLine struct {
 	LineTotal   string `xml:"SpecifiedLineTradeSettlement>SpecifiedTradeSettlementLineMonetarySummation>LineTotalAmount"`
 }
 
+type xmlNote struct {
+	Content     string `xml:"Content"`
+	SubjectCode string `xml:"SubjectCode"`
+}
+
+type xmlURI struct {
+	Value  string `xml:",chardata"`
+	Scheme string `xml:"schemeID,attr"`
+}
+
 type xmlInvoice struct {
 	BusinessProcess string         `xml:"ExchangedDocumentContext>BusinessProcessSpecifiedDocumentContextParameter>ID"`
-	Notes           []string       `xml:"ExchangedDocument>IncludedNote>Content"`
+	Notes           []string       `xml:"-"`
+	NoteEntries     []xmlNote      `xml:"ExchangedDocument>IncludedNote"`
+	SellerURIScheme string         `xml:"-"`
+	BuyerURI        string         `xml:"-"`
+	BuyerURIScheme  string         `xml:"-"`
+	SellerEndpoint  xmlURI         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>SellerTradeParty>URIUniversalCommunication>URIID"`
+	BuyerEndpoint   xmlURI         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>BuyerTradeParty>URIUniversalCommunication>URIID"`
 	Lines           []xmlLine      `xml:"SupplyChainTradeTransaction>IncludedSupplyChainTradeLineItem"`
 	BuyerReference  string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>BuyerReference"`
 	SellerLegalID   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>SellerTradeParty>SpecifiedLegalOrganization>ID"`
 	SellerContact   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>SellerTradeParty>DefinedTradeContact>PersonName"`
-	SellerURI       string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>SellerTradeParty>URIUniversalCommunication>URIID"`
+	SellerURI       string         `xml:"-"`
 	SellerLineOne   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>SellerTradeParty>PostalTradeAddress>LineOne"`
 	SellerCountry   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>SellerTradeParty>PostalTradeAddress>CountryID"`
 	BuyerTaxID      string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>BuyerTradeParty>SpecifiedTaxRegistration>ID"`
 	PurchaseOrder   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeAgreement>BuyerOrderReferencedDocument>IssuerAssignedID"`
+	TypeCode        string         `xml:"ExchangedDocument>TypeCode"`
+	ShipToName      string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeDelivery>ShipToTradeParty>Name"`
+	ShipToCountry   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeDelivery>ShipToTradeParty>PostalTradeAddress>CountryID"`
 	DeliveryDate    string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeDelivery>ActualDeliverySupplyChainEvent>OccurrenceDateTime>DateTimeString"`
+	TaxCurrency     string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>TaxCurrencyCode"`
+	PrecedingRef    string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>InvoiceReferencedDocument>IssuerAssignedID"`
+	PrecedingDate   string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>InvoiceReferencedDocument>FormattedIssueDateTime>DateTimeString"`
 	PaymentRef      string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>PaymentReference"`
 	IBAN            string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementPaymentMeans>PayeePartyCreditorFinancialAccount>IBANID"`
 	BIC             string         `xml:"SupplyChainTradeTransaction>ApplicableHeaderTradeSettlement>SpecifiedTradeSettlementPaymentMeans>PayeeSpecifiedCreditorFinancialInstitution>BICID"`
@@ -386,6 +516,13 @@ func parseInvoice(t *testing.T, doc *generator.Document, opts Options) xmlInvoic
 	if err := xml.Unmarshal(xmlBytes, &inv); err != nil {
 		t.Fatalf("unmarshal: %v\n%s", err, xmlBytes)
 	}
+	for _, n := range inv.NoteEntries {
+		inv.Notes = append(inv.Notes, n.Content)
+	}
+	inv.SellerURI = inv.SellerEndpoint.Value
+	inv.SellerURIScheme = inv.SellerEndpoint.Scheme
+	inv.BuyerURI = inv.BuyerEndpoint.Value
+	inv.BuyerURIScheme = inv.BuyerEndpoint.Scheme
 	return inv
 }
 
@@ -520,7 +657,8 @@ func TestProfileGating(t *testing.T) {
 		t.Errorf("MINIMUM seller address should only carry the country: %q %q", minimum.SellerCountry, minimum.SellerLineOne)
 	}
 	if len(minimum.Notes) != 0 || len(minimum.Taxes) != 0 || len(minimum.Lines) != 0 || minimum.IBAN != "" ||
-		minimum.DueDate != "" || minimum.LineTotal != "" || minimum.SellerURI != "" || minimum.BuyerTaxID != "" {
+		minimum.DueDate != "" || minimum.LineTotal != "" || minimum.SellerURI != "" || minimum.BuyerTaxID != "" ||
+		minimum.ShipToName != "" {
 		t.Errorf("MINIMUM carries fields above its profile: %+v", minimum)
 	}
 	assertEqual(t, "MINIMUM BR-CO-15",
@@ -537,6 +675,14 @@ func TestProfileGating(t *testing.T) {
 	}
 	if basicWL.BIC != "" || basicWL.SellerContact != "" {
 		t.Errorf("BASIC-WL must not carry BIC or seller contact")
+	}
+	if basicWL.ShipToName != "John Doe Warehouse" || basicWL.ShipToCountry != "US" {
+		t.Errorf("BASIC-WL ship-to: %q %q", basicWL.ShipToName, basicWL.ShipToCountry)
+	}
+	for _, tx := range basicWL.Taxes {
+		if tx.DueDateTypeCode != "5" {
+			t.Errorf("BASIC-WL VAT point date code: got %q, want 5", tx.DueDateTypeCode)
+		}
 	}
 	if basicWL.SellerLineOne != "1 Rue de la Paix" {
 		t.Errorf("BASIC-WL seller address line: %q", basicWL.SellerLineOne)
@@ -705,6 +851,34 @@ func TestValidationErrors(t *testing.T) {
 			opts: func() Options { o := simpleOptions(ProfileBasic); o.InvoicingPeriodStart = "01/01/2024"; return o },
 			want: ErrInvalidPeriod,
 		},
+		{
+			name: "invalid VAT point date code",
+			doc:  buildTestDoc,
+			opts: func() Options { o := simpleOptions(ProfileBasic); o.VATPointDateCode = "35"; return o },
+			want: ErrInvalidVATPointDateCode,
+		},
+		{
+			name: "tax currency equals invoice currency",
+			doc:  buildTestDoc,
+			opts: func() Options { o := usdOptions(ProfileBasic); o.TaxCurrencyCode = "USD"; return o },
+			want: ErrInvalidTaxCurrency,
+		},
+		{
+			name: "tax currency without rate",
+			doc:  buildTestDoc,
+			opts: func() Options { o := usdOptions(ProfileBasic); o.TaxCurrencyRate = ""; return o },
+			want: ErrInvalidTaxCurrency,
+		},
+		{
+			name: "ship-to without country",
+			doc:  buildTestDoc,
+			opts: func() Options {
+				o := simpleOptions(ProfileBasic)
+				o.ShipToAddress = &generator.Address{Address: "Somewhere"}
+				return o
+			},
+			want: ErrMissingCountry,
+		},
 	}
 
 	for _, tc := range cases {
@@ -718,6 +892,146 @@ func TestValidationErrors(t *testing.T) {
 				t.Fatalf("got %v, want %v", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestFrenchCreditNote(t *testing.T) {
+	inv := parseInvoice(t, buildFrenchDoc(t), frenchOptions(ProfileEN16931))
+	if inv.TypeCode != "381" {
+		t.Errorf("type code: %q", inv.TypeCode)
+	}
+	if inv.PrecedingRef != "INV-2023-120" || inv.PrecedingDate != "20231201" {
+		t.Errorf("preceding invoice: %q %q", inv.PrecedingRef, inv.PrecedingDate)
+	}
+	if inv.ShipToName != "Client SARL - Entrepôt" || inv.ShipToCountry != "FR" {
+		t.Errorf("ship-to: %q %q", inv.ShipToName, inv.ShipToCountry)
+	}
+	if inv.BusinessProcess != "S1" || inv.SellerLegalID != "123456789" {
+		t.Errorf("cadre de facturation %q, SIREN %q", inv.BusinessProcess, inv.SellerLegalID)
+	}
+	for _, tx := range inv.Taxes {
+		if tx.DueDateTypeCode != "72" {
+			t.Errorf("VAT point date code: got %q, want 72", tx.DueDateTypeCode)
+		}
+	}
+	// Electronic addresses default to the SIREN with the French scheme.
+	if inv.SellerURI != "123456789" || inv.SellerURIScheme != "0225" {
+		t.Errorf("seller electronic address: %q scheme %q", inv.SellerURI, inv.SellerURIScheme)
+	}
+	if inv.BuyerURI != "987654321" || inv.BuyerURIScheme != "0225" {
+		t.Errorf("buyer electronic address: %q scheme %q", inv.BuyerURI, inv.BuyerURIScheme)
+	}
+	// Three legal mentions plus the BAR flow note.
+	codes := map[string]string{}
+	for _, n := range inv.NoteEntries {
+		codes[n.SubjectCode] = n.Content
+	}
+	if codes["BAR"] != "B2B" || codes["PMT"] == "" || codes["PMD"] == "" || codes["AAB"] == "" {
+		t.Errorf("notes: %+v", inv.NoteEntries)
+	}
+}
+
+func TestFrenchRulesErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		mut  func(o *Options, doc *generator.Document)
+	}{
+		{"profile below EN 16931", func(o *Options, _ *generator.Document) { o.Profile = ProfileBasic }},
+		{"missing PMD note", func(o *Options, _ *generator.Document) { o.Notes = o.Notes[1:] }},
+		{"duplicate AAB note", func(o *Options, _ *generator.Document) {
+			o.Notes = append(o.Notes, Note{Content: "x", SubjectCode: "AAB"})
+		}},
+		{"user-supplied BAR note", func(o *Options, _ *generator.Document) {
+			o.Notes = append(o.Notes, Note{Content: "B2C", SubjectCode: "BAR"})
+		}},
+		{"invalid flow", func(o *Options, _ *generator.Document) { o.FrenchFlow = "B2G" }},
+		{"invalid cadre", func(o *Options, _ *generator.Document) { o.BusinessProcessID = "X1" }},
+		{"prepaid cadre unsupported", func(o *Options, _ *generator.Document) { o.BusinessProcessID = "S2" }},
+		{"invalid type code", func(o *Options, _ *generator.Document) { o.TypeCode = "999" }},
+		{"credit note without preceding date", func(o *Options, _ *generator.Document) { o.PrecedingInvoiceDate = "" }},
+		{"invoice number with spaces", func(_ *Options, doc *generator.Document) { doc.SetRef("AV 2024 001") }},
+		{"email as electronic address", func(o *Options, _ *generator.Document) {
+			o.BuyerElectronicAddress = "ap@client.example"
+			o.BuyerElectronicAddressSchemeID = "EM"
+		}},
+		{"non-french VAT rate", func(_ *Options, doc *generator.Document) { doc.Items[0].Tax.Percent = "19" }},
+		{"non-EUR without EUR tax currency", func(o *Options, _ *generator.Document) { o.CurrencyCode = "USD" }},
+		{"due date before issue date", func(o *Options, _ *generator.Document) { o.PaymentDueDate = "2023-12-31" }},
+		{"quantity with 5 decimals", func(_ *Options, doc *generator.Document) { doc.Items[0].Quantity = "1.00001" }},
+		{"seller not in France", func(o *Options, _ *generator.Document) { o.SellerCountryCode = "BE" }},
+		{"seller SIREN missing", func(o *Options, _ *generator.Document) { o.SellerLegalID = "" }},
+		{"seller SIREN malformed", func(o *Options, _ *generator.Document) { o.SellerLegalID = "12345678A" }},
+		{"seller SIREN wrong scheme", func(o *Options, _ *generator.Document) { o.SellerLegalIDSchemeID = "0009" }},
+		{"french buyer without SIREN", func(o *Options, _ *generator.Document) { o.BuyerLegalID = "" }},
+		{"no cadre de facturation", func(o *Options, _ *generator.Document) { o.BusinessProcessID = "" }},
+		{"credit note without preceding invoice", func(o *Options, _ *generator.Document) { o.PrecedingInvoiceReference = "" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := buildFrenchDoc(t)
+			opts := frenchOptions(ProfileEN16931)
+			tc.mut(&opts, doc)
+			if err := doc.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			_, err := BuildXML(doc, opts)
+			if !errors.Is(err, ErrFrenchRules) {
+				t.Fatalf("got %v, want ErrFrenchRules", err)
+			}
+		})
+	}
+
+	// A B2BINT flow to a foreign buyer needs neither a SIREN nor a French
+	// electronic address scheme.
+	doc := buildFrenchDoc(t)
+	doc.Customer.Address.Country = "DE"
+	opts := frenchOptions(ProfileEN16931)
+	opts.FrenchFlow = "B2BINT"
+	opts.BuyerCountryCode = "DE"
+	opts.BuyerLegalID = ""
+	opts.BuyerLegalIDSchemeID = ""
+	opts.BuyerElectronicAddress = "DE123456789"
+	opts.BuyerElectronicAddressSchemeID = "9930"
+	opts.ShipToAddress.Country = "DE"
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BuildXML(doc, opts); err != nil {
+		t.Fatalf("foreign buyer without SIREN should pass: %v", err)
+	}
+}
+
+func TestTaxCurrency(t *testing.T) {
+	doc := buildTestDoc(t)
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	xmlBytes, err := BuildXML(doc, usdOptions(ProfileBasic))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(xmlBytes)
+	if !strings.Contains(out, "<ram:TaxCurrencyCode>EUR</ram:TaxCurrencyCode>") {
+		t.Error("missing TaxCurrencyCode")
+	}
+	if !strings.Contains(out, `<ram:TaxTotalAmount currencyID="USD">294.00</ram:TaxTotalAmount>`) {
+		t.Error("missing VAT total in invoice currency")
+	}
+	// 294.00 * 0.9234 = 271.4796 -> 271.48
+	if !strings.Contains(out, `<ram:TaxTotalAmount currencyID="EUR">271.48</ram:TaxTotalAmount>`) {
+		t.Errorf("missing or wrong VAT total in tax currency:\n%s", out)
+	}
+	if idx := strings.Index(out, "<ram:TaxCurrencyCode>"); idx < 0 || idx > strings.Index(out, "<ram:InvoiceCurrencyCode>") {
+		t.Error("TaxCurrencyCode must precede InvoiceCurrencyCode")
+	}
+
+	// MINIMUM carries neither.
+	xmlBytes, err = BuildXML(doc, usdOptions(ProfileMinimum))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(xmlBytes), "TaxCurrencyCode") || strings.Count(string(xmlBytes), "<ram:TaxTotalAmount") != 1 {
+		t.Error("MINIMUM must not carry the tax currency")
 	}
 }
 

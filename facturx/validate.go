@@ -57,12 +57,23 @@ var (
 	// ErrUnsupportedPrecision is returned when Options.CurrencyPrecision is
 	// above 2: EN 16931 amounts carry at most two decimals (BR-DEC).
 	ErrUnsupportedPrecision = errors.New("currency precision above 2 decimals is not supported")
+
+	// ErrInvalidVATPointDateCode is returned for a VATPointDateCode other
+	// than "5", "29" or "72".
+	ErrInvalidVATPointDateCode = errors.New("invalid VAT point date code (expected 5, 29 or 72)")
+
+	// ErrInvalidTaxCurrency is returned when TaxCurrencyCode is malformed,
+	// equals the invoice currency, or has no positive TaxCurrencyRate.
+	ErrInvalidTaxCurrency = errors.New("invalid tax currency")
 )
 
 var (
 	countryCodeRe  = regexp.MustCompile(`^[A-Z]{2}$`)
 	currencyCodeRe = regexp.MustCompile(`^[A-Z]{3}$`)
 )
+
+// vatPointDateCodes are the UNTDID 2475 values allowed for BT-8.
+var vatPointDateCodes = map[string]bool{"5": true, "29": true, "72": true}
 
 // VAT category codes (UNTDID 5305 subset used by EN 16931).
 var vatCategories = map[string]struct {

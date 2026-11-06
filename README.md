@@ -522,18 +522,54 @@ Options that belong to a higher profile than the one selected are silently omitt
 
 `Attach` and `BuildXML` reject documents that cannot produce a valid invoice instead of emitting XML that validators will refuse. Errors wrap one of the sentinels below; test them with `errors.Is`.
 
-| Error                       | Raised when                                                                              |
-| --------------------------- | ---------------------------------------------------------------------------------------- |
-| `ErrMissingSellerID`        | Neither `SellerTaxID` nor `SellerLegalID` is set (BR-CO-26)                              |
-| `ErrMissingCountry`         | Seller country missing, or buyer country missing above MINIMUM                           |
-| `ErrInvalidCountryCode`     | A country code is not two letters (ISO 3166-1 alpha-2)                                   |
-| `ErrInvalidCurrencyCode`    | The currency code is not three letters (ISO 4217)                                        |
-| `ErrInvalidDate`            | A date does not parse                                                                    |
-| `ErrInvalidTaxCategory`     | Unknown category, `S` with a 0% rate, or an exempt category with a non-zero rate         |
-| `ErrMissingExemptionReason` | A category other than `S` or `Z` has no reason and no reason code                        |
-| `ErrFixedAmountTax`         | An item has a fixed-amount tax and the profile is above MINIMUM                          |
-| `ErrMissingPaymentTerms`    | Above MINIMUM, an amount is due but there is no due date and no payment terms (BR-CO-25) |
-| `ErrInvalidPeriod`          | Only one of the invoicing period dates is set                                            |
+| Error                        | Raised when                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `ErrMissingSellerID`         | Neither `SellerTaxID` nor `SellerLegalID` is set (BR-CO-26)                              |
+| `ErrMissingCountry`          | Seller country missing, or buyer country missing above MINIMUM                           |
+| `ErrInvalidCountryCode`      | A country code is not two letters (ISO 3166-1 alpha-2)                                   |
+| `ErrInvalidCurrencyCode`     | The currency code is not three letters (ISO 4217)                                        |
+| `ErrInvalidDate`             | A date does not parse                                                                    |
+| `ErrInvalidTaxCategory`      | Unknown category, `S` with a 0% rate, or an exempt category with a non-zero rate         |
+| `ErrMissingExemptionReason`  | A category other than `S` or `Z` has no reason and no reason code                        |
+| `ErrFixedAmountTax`          | An item has a fixed-amount tax and the profile is above MINIMUM                          |
+| `ErrMissingPaymentTerms`     | Above MINIMUM, an amount is due but there is no due date and no payment terms (BR-CO-25) |
+| `ErrInvalidPeriod`           | Only one of the invoicing period dates is set                                            |
+| `ErrInvalidVATPointDateCode` | `VATPointDateCode` is not `5`, `29` or `72`                                              |
+| `ErrInvalidTaxCurrency`      | Tax currency malformed, equal to the invoice currency, or without a positive rate        |
+| `ErrUnsupportedPrecision`    | `Options.CurrencyPrecision` is above 2                                                   |
+| `ErrFrenchRules`             | `FrenchRules` is set and a French requirement is broken                                  |
+
+### French e-invoicing
+
+Set `FrenchRules: true` to produce documents for the French e-invoicing reform (AFNOR XP Z12-012, "Flux 2"). On top of EN 16931 the library then:
+
+- requires profile `EN 16931` or `EXTENDED`, a seller in France with its SIREN in `SellerLegalID` (scheme `"0002"`), and `BusinessProcessID` set to the cadre de facturation (`B1`, `S1`, `M1`, `B4`, `S4`, `M4`, `S5`, `S6`, `B7`, `S7`);
+- requires the three legal mentions as notes with subject codes `PMD` (pénalités de retard), `PMT` (indemnité forfaitaire de recouvrement) and `AAB` (escompte ou absence d'escompte), each exactly once;
+- adds a `BAR` note carrying `FrenchFlow` (`B2B` by default) and, for `B2B`, requires the buyer's SIREN;
+- defaults the electronic addresses to the SIREN with the French routing scheme `"0225"` when none is given, and rejects e-mail style addresses;
+- checks the document type against the French list, French VAT rates only, no `L`/`M` categories, dates between 2000 and 2099, due date not before the document date, at most 4 decimals on quantities, `EUR` as tax currency for foreign-currency invoices, and a preceding invoice with its date on credit notes and corrective invoices.
+
+```go
+result, err := facturx.Attach(buf.Bytes(), doc, facturx.Options{
+    Profile:               facturx.ProfileEN16931,
+    FrenchRules:           true,
+    BusinessProcessID:     "S1", // services, standard case
+    SellerTaxID:           "FR12345678901",
+    SellerLegalID:         "123456789",
+    SellerLegalIDSchemeID: "0002",
+    BuyerLegalID:          "987654321",
+    BuyerLegalIDSchemeID:  "0002",
+    PaymentDueDate:        "2024-02-01",
+    VATPointDateCode:      "72", // TVA sur les encaissements
+    Notes: []facturx.Note{
+        {Content: "Pénalités de retard : 3 fois le taux d'intérêt légal", SubjectCode: "PMD"},
+        {Content: "Indemnité forfaitaire pour frais de recouvrement : 40 €", SubjectCode: "PMT"},
+        {Content: "Pas d'escompte pour paiement anticipé", SubjectCode: "AAB"},
+    },
+})
+```
+
+Violations are reported before any XML is produced and wrap `ErrFrenchRules`. The test suite validates the French fixture with mustangproject 2.26+, which applies the official BR-FR schematron when both parties are in France. Transmission through an accredited platform, e-reporting and archiving remain outside the library's scope.
 
 ### Options
 
@@ -543,6 +579,7 @@ Options that belong to a higher profile than the one selected are silently omitt
 | `CurrencyCode`                                                          | all      | ISO 4217 code (default: `"EUR"`)                                                               |
 | `TypeCode`                                                              | all      | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)                            |
 | `BusinessProcessID`                                                     | all      | Business process (BT-23), e.g. the Peppol billing process identifier                           |
+| `FrenchRules`, `FrenchFlow`                                             | —        | Enable the French e-invoicing rules, see [French e-invoicing](#french-e-invoicing)             |
 | `BuyerReference`                                                        | all      | Buyer's routing reference (BT-10), e.g. cost centre or Leitweg-ID                              |
 | `PurchaseOrderReference`                                                | all      | Purchase order number (BT-13)                                                                  |
 | `SellerTaxID`                                                           | all      | Seller VAT registration number (e.g. `"FR12345678901"`)                                        |
@@ -556,16 +593,20 @@ Options that belong to a higher profile than the one selected are silently omitt
 | `BuyerElectronicAddress`, `BuyerElectronicAddressSchemeID`              | BASIC-WL | Buyer electronic address (BT-49)                                                               |
 | `DeliveryDate`                                                          | BASIC-WL | Actual delivery date (BT-72)                                                                   |
 | `InvoicingPeriodStart`, `InvoicingPeriodEnd`                            | BASIC-WL | Invoicing period (BG-14); both or neither                                                      |
+| `ShipToName`, `ShipToAddress`, `ShipToCountryCode`                      | BASIC-WL | Deliver-to party (BG-13, BG-15) when goods go elsewhere than the buyer address                 |
 | `PaymentDueDate`                                                        | BASIC-WL | Payment due date; defaults to `doc.PaymentTerm` when that is a date                            |
 | `PaymentTermsDescription`                                               | BASIC-WL | Free-text payment terms (BT-20)                                                                |
 | `PaymentReference`                                                      | BASIC-WL | Remittance information (BT-83)                                                                 |
 | `PaymentIBAN`                                                           | BASIC-WL | Seller IBAN for bank transfer                                                                  |
 | `PaymentBIC`                                                            | EN 16931 | Seller BIC/SWIFT code                                                                          |
 | `PaymentMeansCode`                                                      | BASIC-WL | UN/ECE 4461 payment means code (default: `"58"` when IBAN is set)                              |
-| `Notes`                                                                 | BASIC-WL | Document notes (BT-22); defaults to `doc.Notes`                                                |
+| `PrecedingInvoiceReference`, `PrecedingInvoiceDate`                     | BASIC-WL | Invoice a credit note corrects (BG-3)                                                          |
+| `Notes`                                                                 | BASIC-WL | Document notes (BG-1) with optional UNTDID 4451 subject code; defaults to `doc.Notes`          |
 | `TaxCategoryCode`                                                       | BASIC-WL | VAT category for taxes without a `Category` (default: `"S"`)                                   |
 | `NoTaxCategoryCode`, `NoTaxExemptionReason`, `NoTaxExemptionReasonCode` | BASIC-WL | VAT category and mandatory reason for items without a `Tax` (default category: `"E"`)          |
 | `DocumentDiscountReason`                                                | BASIC-WL | Reason text of the allowance generated from `doc.Discount` (default: `"Discount"`)             |
+| `VATPointDateCode`                                                      | BASIC-WL | When VAT becomes chargeable (BT-8): `"5"` invoice date, `"29"` delivery, `"72"` payment        |
+| `TaxCurrencyCode`, `TaxCurrencyRate`                                    | BASIC-WL | Currency of the tax authority (BT-6) and conversion rate; adds the VAT total in that currency  |
 | `ItemDefaultUnitCode`                                                   | BASIC    | UN/ECE Rec 20 unit code for all line items (default: `"C62"` piece/unit)                       |
 | `ShowIcon`                                                              | —        | Place the Factur-X profile icon in the bottom-right corner of the first page                   |
 

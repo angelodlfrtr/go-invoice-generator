@@ -1,6 +1,10 @@
 package facturx
 
-import generator "github.com/angelodlfrtr/go-invoice-generator/generator"
+import (
+	"strings"
+
+	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
+)
 
 // Options holds Factur-X-specific data that cannot be derived from the generator.Document.
 //
@@ -25,7 +29,25 @@ type Options struct {
 
 	// BusinessProcessID is the business process context (BT-23), e.g.
 	// "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0" for Peppol / XRechnung.
+	// The French e-invoicing specifications carry the "cadre de facturation"
+	// here (B1 goods, S1 services, M1 mixed, and their variants).
 	BusinessProcessID string
+
+	// FrenchRules enables the rules of the French e-invoicing reform
+	// (AFNOR XP Z12-012, "Flux 2") on top of EN 16931. It requires profile
+	// EN 16931 or EXTENDED, a seller in France identified by a SIREN
+	// (SellerLegalID with scheme "0002"), BusinessProcessID set to the cadre
+	// de facturation, the three legal mentions as notes with subject codes
+	// PMT, PMD and AAB, French VAT rates, and a preceding invoice with its
+	// date on credit notes. It also adds a "BAR" note carrying FrenchFlow and
+	// defaults the electronic addresses to the SIREN with scheme "0225".
+	// Violations wrap ErrFrenchRules.
+	FrenchRules bool
+
+	// FrenchFlow is the processing flow stated in the BAR note (BT-21/22):
+	// "B2B" (default), "B2BINT", "B2C", "OUTOFSCOPE" or "ARCHIVEONLY". With
+	// "B2B" the buyer needs a SIREN. Only used with FrenchRules.
+	FrenchFlow string
 
 	// BuyerReference is the buyer's internal routing reference (BT-10), such
 	// as a cost centre or the Leitweg-ID. For a purchase order number use
@@ -93,6 +115,14 @@ type Options struct {
 	InvoicingPeriodStart string
 	InvoicingPeriodEnd   string
 
+	// ShipToName and ShipToAddress describe the deliver-to party (BG-13,
+	// BG-15) when goods go somewhere other than the buyer's address. France
+	// requires it whenever the delivery address differs from the billing one.
+	// ShipToCountryCode falls back to ShipToAddress.Country.
+	ShipToName        string
+	ShipToAddress     *generator.Address
+	ShipToCountryCode string
+
 	// ---- Payment (BASIC-WL and above) ----
 
 	// PaymentDueDate is the payment due date. When empty, doc.PaymentTerm is
@@ -118,11 +148,17 @@ type Options struct {
 	// PaymentIBAN is set.
 	PaymentMeansCode string
 
+	// PrecedingInvoiceReference and PrecedingInvoiceDate identify the invoice
+	// a credit note (TypeCode "381") corrects (BG-3). The reference is
+	// mandatory on French credit notes.
+	PrecedingInvoiceReference string
+	PrecedingInvoiceDate      string
+
 	// ---- Notes (BASIC-WL and above) ----
 
-	// Notes are free-text document notes (BT-22). When empty, doc.Notes is
-	// used if set.
-	Notes []string
+	// Notes are the document notes (BG-1). When empty, doc.Notes is used as
+	// a single note without subject code.
+	Notes []Note
 
 	// ---- Taxes ----
 
@@ -141,6 +177,19 @@ type Options struct {
 	// DocumentDiscountReason is the reason text for the document-level
 	// allowance generated from doc.Discount (BT-97). Defaults to "Discount".
 	DocumentDiscountReason string
+
+	// VATPointDateCode states when VAT becomes chargeable (BT-8, UNTDID 2475):
+	// "5" invoice date, "29" delivery date, "72" payment date. In France use
+	// "5" for "TVA sur les débits" and "72" for "TVA sur les encaissements".
+	// BASIC-WL and above.
+	VATPointDateCode string
+
+	// TaxCurrencyCode (BT-6) is set when the invoice currency is not the
+	// currency of the seller's tax authority; the total VAT is then also
+	// given in that currency, converted with TaxCurrencyRate (tax currency
+	// per unit of invoice currency, e.g. "0.9234"). BASIC-WL and above.
+	TaxCurrencyCode string
+	TaxCurrencyRate string
 
 	// ---- Items (BASIC and above) ----
 
@@ -234,6 +283,20 @@ func (o Options) buyerCountryCode(doc *generator.Document) string {
 	return ""
 }
 
+func (o Options) shipToCountryCode() string {
+	if o.ShipToCountryCode != "" {
+		return o.ShipToCountryCode
+	}
+	if o.ShipToAddress != nil {
+		return o.ShipToAddress.Country
+	}
+	return ""
+}
+
+func (o Options) hasShipTo() bool {
+	return o.ShipToName != "" || o.ShipToAddress != nil || o.ShipToCountryCode != ""
+}
+
 func (o Options) sellerElectronicAddressSchemeID() string {
 	if o.SellerElectronicAddressSchemeID != "" {
 		return o.SellerElectronicAddressSchemeID
@@ -248,12 +311,46 @@ func (o Options) buyerElectronicAddressSchemeID() string {
 	return "EM"
 }
 
-func (o Options) notes(doc *generator.Document) []string {
+func (o Options) notes(doc *generator.Document) []Note {
 	if len(o.Notes) > 0 {
 		return o.Notes
 	}
 	if doc.Notes != "" {
-		return []string{doc.Notes}
+		return []Note{{Content: doc.Notes}}
 	}
 	return nil
+}
+
+// Note is a document note (BG-1): free text plus an optional UNTDID 4451
+// subject code. France requires three notes: "PMT" (indemnité forfaitaire
+// pour frais de recouvrement), "PMD" (pénalités de retard) and "AAB"
+// (conditions d'escompte, or its absence).
+type Note struct {
+	Content     string
+	SubjectCode string
+}
+
+func (o Options) frenchFlow() string {
+	if o.FrenchFlow != "" {
+		return strings.ToUpper(strings.TrimSpace(o.FrenchFlow))
+	}
+	return "B2B"
+}
+
+// applyFrenchDefaults fills the values the French rules expect when the
+// caller left them empty: electronic addresses as the SIREN with the French
+// routing scheme "0225".
+func applyFrenchDefaults(o Options) Options {
+	if !o.FrenchRules {
+		return o
+	}
+	if o.SellerElectronicAddress == "" && o.SellerLegalID != "" {
+		o.SellerElectronicAddress = o.SellerLegalID
+		o.SellerElectronicAddressSchemeID = frEndpointScheme
+	}
+	if o.BuyerElectronicAddress == "" && o.BuyerLegalID != "" {
+		o.BuyerElectronicAddress = o.BuyerLegalID
+		o.BuyerElectronicAddressSchemeID = frEndpointScheme
+	}
+	return o
 }
