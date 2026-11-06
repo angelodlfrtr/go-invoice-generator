@@ -256,6 +256,23 @@ When two or more distinct tax names are present the totals block shows the overa
 tax amount (same as before) followed by a smaller per-name breakdown. Taxes without a
 name are grouped under the label set by `Options.TextTotalTaxOther` (default: `"Other"`).
 
+For e-invoicing exports (see [Factur-X](#factur-x--wip--experimental)) a tax can also
+carry its EN 16931 VAT category and, when the category requires it, an exemption reason.
+These fields do not change the rendered PDF.
+
+```go
+// Exempt line: category E needs a reason or a VATEX reason code
+Tax: &generator.Tax{
+	Percent:             "0",
+	Category:            "E",
+	ExemptionReason:     "TVA non applicable, art. 293 B du CGI",
+	ExemptionReasonCode: "VATEX-FR-FRANCHISE",
+}
+
+// Intra-community supply (reverse charge by the buyer)
+Tax: &generator.Tax{Percent: "0", Category: "K", ExemptionReason: "Intra-community supply"}
+```
+
 ### Discount
 
 A discount is either a **percentage** or a **fixed amount** — not both.
@@ -309,9 +326,35 @@ if err := doc.Validate(); err != nil {
 }
 
 fmt.Println(doc.TotalWithoutTaxAndWithoutDocumentDiscount()) // sum of item subtotals after item discounts
+fmt.Println(doc.DocumentDiscount())                         // document discount amount
 fmt.Println(doc.TotalWithoutTax())                          // above minus document discount
 fmt.Println(doc.Tax())                                      // total tax (respects document discount)
 fmt.Println(doc.TotalWithTax())                             // final amount due
+```
+
+### Rounding model
+
+Totals follow the EN 16931 model used by accounting software and e-invoicing
+validators. Amounts are rounded to `Options.CurrencyPrecision` at three points:
+
+1. each item's net amount after its own discount;
+2. the document discount, which is then split across tax groups in proportion to
+   their line totals (the rounding residual goes to the largest group);
+3. each tax group's tax, computed on the group's rounded taxable amount.
+
+A tax group is the set of items sharing a `Tax.Category` and rate; fixed-amount
+taxes and untaxed items form their own groups. Every total is a sum of those
+rounded parts, never a rounded sum, so the totals block, the per-name tax lines
+and any Factur-X export derived from the document agree to the cent.
+
+`doc.Breakdown()` exposes the whole computation: the rounded line amounts, the
+groups with their line total, discount share, taxable amount and tax, and the
+document totals.
+
+```go
+for _, g := range doc.Breakdown().Groups {
+	fmt.Println(g.Category, g.Percent, g.Basis(), g.Tax)
+}
 ```
 
 Item-level helpers are also available:
@@ -403,7 +446,7 @@ if err := pdf.Output(&buf); err != nil {
 
 ## Factur-X — WIP / Experimental
 
-The `facturx` subpackage embeds a [Factur-X](https://fnfe-mpe.org/factur-x/) (also known as ZUGFeRD 2.x) compliant CII XML into the PDF produced by `Build()`. All five conformance levels are supported and validated with mustang-cli and veraPDF (PDF/A-3B). In addition to the XML attachment, `Attach` automatically:
+The `facturx` subpackage embeds a [Factur-X](https://fnfe-mpe.org/factur-x/) (also known as ZUGFeRD 2.x) compliant CII XML into the PDF produced by `Build()`. All five conformance levels are supported and validated with mustang-cli (profile XSDs and EN 16931 schematron) and veraPDF (PDF/A-3B). In addition to the XML attachment, `Attach` automatically:
 
 - Sets `/AFRelationship /Alternative` on the embedded file, as required by PDF/A-3.
 - Inserts an sRGB ICC OutputIntent into the PDF catalog (pure Go, no external dependencies).
@@ -434,14 +477,16 @@ if err := pdf.Output(&buf); err != nil {
 
 // 2. Attach the Factur-X XML and bring the document into PDF/A-3b conformance.
 result, err := facturx.Attach(buf.Bytes(), doc, facturx.Options{
-    Profile:           facturx.ProfileEN16931,
-    SellerTaxID:       "FR12345678901",
-    SellerCountryCode: "FR",
-    BuyerCountryCode:  "US",
-    CurrencyCode:      "EUR",
-    PaymentDueDate:    "20240201",
-    PaymentIBAN:       "FR7630006000011234567890189",
-    PaymentBIC:        "BNPAFRPP",
+    Profile:               facturx.ProfileEN16931,
+    SellerTaxID:           "FR12345678901",
+    SellerLegalID:         "123456789",   // SIREN
+    SellerLegalIDSchemeID: "0002",        // SIRENE register
+    SellerCountryCode:     "FR",
+    BuyerCountryCode:      "US",
+    CurrencyCode:          "EUR",
+    PaymentDueDate:        "2024-02-01",
+    PaymentIBAN:           "FR7630006000011234567890189",
+    PaymentBIC:            "BNPAFRPP",
 })
 if err != nil {
     log.Fatal(err)
@@ -451,35 +496,78 @@ if err != nil {
 os.WriteFile("invoice_facturx.pdf", result, 0644)
 ```
 
+`facturx.BuildXML(doc, opts)` returns the bare CII XML without touching the PDF.
+
 ### Profiles
 
-| Constant                  | Factur-X profile | Line items in XML |
-| ------------------------- | ---------------- | ----------------- |
-| `facturx.ProfileMinimum`  | MINIMUM          | No                |
-| `facturx.ProfileBasicWL`  | BASIC-WL         | No                |
-| `facturx.ProfileBasic`    | BASIC            | Yes               |
-| `facturx.ProfileEN16931`  | EN 16931         | Yes               |
-| `facturx.ProfileExtended` | EXTENDED         | Yes               |
+| Constant                  | Factur-X profile | Carries                                                               |
+| ------------------------- | ---------------- | --------------------------------------------------------------------- |
+| `facturx.ProfileMinimum`  | MINIMUM          | Parties (name, country, identifiers), references, totals              |
+| `facturx.ProfileBasicWL`  | BASIC-WL         | + full addresses, VAT breakdown, allowances, payment, delivery, notes |
+| `facturx.ProfileBasic`    | BASIC            | + line items                                                          |
+| `facturx.ProfileEN16931`  | EN 16931         | + item descriptions, seller contact, BIC                              |
+| `facturx.ProfileExtended` | EXTENDED         | Same content as EN 16931                                              |
+
+Options that belong to a higher profile than the one selected are silently omitted from the XML.
+
+### How the XML is derived
+
+- **VAT breakdown.** Items are grouped by VAT category and rate (BR-CO-18). The category comes from `Tax.Category`, falling back to `TaxCategoryCode` (default `"S"`). Items without a `Tax` use `NoTaxCategoryCode` (default `"E"`, exempt) and must be given a reason through `NoTaxExemptionReason` or `NoTaxExemptionReasonCode`.
+- **Document discount.** `doc.Discount` becomes one document-level allowance per VAT group (reason code `95`), split in proportion to each group's line total.
+- **Totals.** Every amount comes from `doc.Breakdown()`, the same figures printed on the PDF (see [Rounding model](#rounding-model)), so the XML matches the PDF to the cent and the EN 16931 arithmetic rules hold exactly (BR-CO-10, 11, 13, 14, 15). Amounts carry two decimals, so `Options.CurrencyPrecision` above 2 is rejected.
+- **Fixed-amount taxes** (`Tax.Amount`) have no VAT representation. They are accepted for MINIMUM, which carries no breakdown, and rejected with `ErrFixedAmountTax` above it; model such charges as separate items instead.
+- **Dates** accept `DD/MM/YYYY`, `YYYY-MM-DD` or `YYYYMMDD`. When `PaymentDueDate` is empty and `doc.PaymentTerm` parses as a date, it is used as the due date.
+
+### Validation
+
+`Attach` and `BuildXML` reject documents that cannot produce a valid invoice instead of emitting XML that validators will refuse. Errors wrap one of the sentinels below; test them with `errors.Is`.
+
+| Error                       | Raised when                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------- |
+| `ErrMissingSellerID`        | Neither `SellerTaxID` nor `SellerLegalID` is set (BR-CO-26)                              |
+| `ErrMissingCountry`         | Seller country missing, or buyer country missing above MINIMUM                           |
+| `ErrInvalidCountryCode`     | A country code is not two letters (ISO 3166-1 alpha-2)                                   |
+| `ErrInvalidCurrencyCode`    | The currency code is not three letters (ISO 4217)                                        |
+| `ErrInvalidDate`            | A date does not parse                                                                    |
+| `ErrInvalidTaxCategory`     | Unknown category, `S` with a 0% rate, or an exempt category with a non-zero rate         |
+| `ErrMissingExemptionReason` | A category other than `S` or `Z` has no reason and no reason code                        |
+| `ErrFixedAmountTax`         | An item has a fixed-amount tax and the profile is above MINIMUM                          |
+| `ErrMissingPaymentTerms`    | Above MINIMUM, an amount is due but there is no due date and no payment terms (BR-CO-25) |
+| `ErrInvalidPeriod`          | Only one of the invoicing period dates is set                                            |
 
 ### Options
 
-| Field                 | Type    | Description                                                                         |
-| --------------------- | ------- | ----------------------------------------------------------------------------------- |
-| `Profile`             | Profile | Conformance level (default: `ProfileMinimum`)                                       |
-| `CurrencyCode`        | string  | ISO 4217 code (default: `"EUR"`)                                                    |
-| `SellerTaxID`         | string  | Seller VAT registration number (e.g. `"FR12345678901"`)                             |
-| `SellerCountryCode`   | string  | ISO 3166-1 alpha-2 seller country code (e.g. `"FR"`); falls back to address country |
-| `BuyerCountryCode`    | string  | ISO 3166-1 alpha-2 buyer country code (e.g. `"US"`); falls back to address country  |
-| `BuyerReference`      | string  | Buyer's internal reference (e.g. a purchase order number)                           |
-| `BuyerTaxID`          | string  | Buyer VAT registration number (rendered for BASIC-WL and above)                     |
-| `PaymentDueDate`      | string  | Payment due date in `"YYYYMMDD"` format                                             |
-| `PaymentIBAN`         | string  | Seller IBAN for bank transfer                                                       |
-| `PaymentBIC`          | string  | Seller BIC/SWIFT code                                                               |
-| `PaymentMeansCode`    | string  | UN/ECE 4461 payment means code (default: `"58"` when IBAN is set)                   |
-| `TaxCategoryCode`     | string  | Default VAT category code — `"S"` standard, `"E"` exempt, `"Z"` zero-rated          |
-| `TypeCode`            | string  | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)                 |
-| `ItemDefaultUnitCode` | string  | UN/ECE Rec 20 unit code for all line items (default: `"C62"` piece/unit)            |
-| `ShowIcon`            | bool    | Place the Factur-X profile icon in the bottom-right corner of the first page        |
+| Field                                                                   | Profile  | Description                                                                                    |
+| ----------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `Profile`                                                               | —        | Conformance level (default: `ProfileMinimum`)                                                  |
+| `CurrencyCode`                                                          | all      | ISO 4217 code (default: `"EUR"`)                                                               |
+| `TypeCode`                                                              | all      | UN/CEFACT type code (default: `"380"` invoice; `"381"` credit note)                            |
+| `BusinessProcessID`                                                     | all      | Business process (BT-23), e.g. the Peppol billing process identifier                           |
+| `BuyerReference`                                                        | all      | Buyer's routing reference (BT-10), e.g. cost centre or Leitweg-ID                              |
+| `PurchaseOrderReference`                                                | all      | Purchase order number (BT-13)                                                                  |
+| `SellerTaxID`                                                           | all      | Seller VAT registration number (e.g. `"FR12345678901"`)                                        |
+| `SellerLegalID`, `SellerLegalIDSchemeID`                                | all      | Seller legal registration ID (BT-30), e.g. SIREN, with its ISO 6523 scheme (`"0002"` = SIRENE) |
+| `SellerCountryCode`                                                     | all      | ISO 3166-1 alpha-2 seller country; falls back to the company address country                   |
+| `SellerElectronicAddress`, `SellerElectronicAddressSchemeID`            | BASIC-WL | Seller electronic address (BT-34); scheme defaults to `"EM"` (e-mail)                          |
+| `SellerContactName`, `SellerContactPhone`, `SellerContactEmail`         | EN 16931 | Seller contact (BG-6)                                                                          |
+| `BuyerTaxID`                                                            | BASIC-WL | Buyer VAT registration number                                                                  |
+| `BuyerLegalID`, `BuyerLegalIDSchemeID`                                  | all      | Buyer legal registration ID (BT-47)                                                            |
+| `BuyerCountryCode`                                                      | all      | ISO 3166-1 alpha-2 buyer country; falls back to the customer address country                   |
+| `BuyerElectronicAddress`, `BuyerElectronicAddressSchemeID`              | BASIC-WL | Buyer electronic address (BT-49)                                                               |
+| `DeliveryDate`                                                          | BASIC-WL | Actual delivery date (BT-72)                                                                   |
+| `InvoicingPeriodStart`, `InvoicingPeriodEnd`                            | BASIC-WL | Invoicing period (BG-14); both or neither                                                      |
+| `PaymentDueDate`                                                        | BASIC-WL | Payment due date; defaults to `doc.PaymentTerm` when that is a date                            |
+| `PaymentTermsDescription`                                               | BASIC-WL | Free-text payment terms (BT-20)                                                                |
+| `PaymentReference`                                                      | BASIC-WL | Remittance information (BT-83)                                                                 |
+| `PaymentIBAN`                                                           | BASIC-WL | Seller IBAN for bank transfer                                                                  |
+| `PaymentBIC`                                                            | EN 16931 | Seller BIC/SWIFT code                                                                          |
+| `PaymentMeansCode`                                                      | BASIC-WL | UN/ECE 4461 payment means code (default: `"58"` when IBAN is set)                              |
+| `Notes`                                                                 | BASIC-WL | Document notes (BT-22); defaults to `doc.Notes`                                                |
+| `TaxCategoryCode`                                                       | BASIC-WL | VAT category for taxes without a `Category` (default: `"S"`)                                   |
+| `NoTaxCategoryCode`, `NoTaxExemptionReason`, `NoTaxExemptionReasonCode` | BASIC-WL | VAT category and mandatory reason for items without a `Tax` (default category: `"E"`)          |
+| `DocumentDiscountReason`                                                | BASIC-WL | Reason text of the allowance generated from `doc.Discount` (default: `"Discount"`)             |
+| `ItemDefaultUnitCode`                                                   | BASIC    | UN/ECE Rec 20 unit code for all line items (default: `"C62"` piece/unit)                       |
+| `ShowIcon`                                                              | —        | Place the Factur-X profile icon in the bottom-right corner of the first page                   |
 
 ---
 

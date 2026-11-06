@@ -3,37 +3,47 @@ package facturx
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"text/template"
-	"time"
 
 	generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 	"github.com/shopspring/decimal"
 )
 
+// ciiXMLTemplate renders a UN/CEFACT CII D16B invoice. Element order follows
+// the Factur-X 1.0.07 profile XSDs; profile gating is done in buildCIIData by
+// leaving fields empty.
 const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryInvoice
 	xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
 	xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"
 	xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
-
 	<rsm:ExchangedDocumentContext>
+		{{- if .BusinessProcessID}}
+		<ram:BusinessProcessSpecifiedDocumentContextParameter>
+			<ram:ID>{{xe .BusinessProcessID}}</ram:ID>
+		</ram:BusinessProcessSpecifiedDocumentContextParameter>
+		{{- end}}
 		<ram:GuidelineSpecifiedDocumentContextParameter>
 			<ram:ID>{{.GuidelineID}}</ram:ID>
 		</ram:GuidelineSpecifiedDocumentContextParameter>
 	</rsm:ExchangedDocumentContext>
-
 	<rsm:ExchangedDocument>
 		<ram:ID>{{xe .ID}}</ram:ID>
 		<ram:TypeCode>{{.TypeCode}}</ram:TypeCode>
 		<ram:IssueDateTime>
 			<udt:DateTimeString format="102">{{.IssueDate}}</udt:DateTimeString>
 		</ram:IssueDateTime>
+		{{- range .Notes}}
+		<ram:IncludedNote>
+			<ram:Content>{{xe .}}</ram:Content>
+		</ram:IncludedNote>
+		{{- end}}
 	</rsm:ExchangedDocument>
-
 	<rsm:SupplyChainTradeTransaction>
-		{{- if .HasLineItems}}
 		{{- range .LineItems}}
 		<ram:IncludedSupplyChainTradeLineItem>
 			<ram:AssociatedDocumentLineDocument>
@@ -49,26 +59,24 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				{{- if .GrossUnitPrice}}
 				<ram:GrossPriceProductTradePrice>
 					<ram:ChargeAmount>{{.GrossUnitPrice}}</ram:ChargeAmount>
-					{{- if .LineDiscount}}
 					<ram:AppliedTradeAllowanceCharge>
 						<ram:ChargeIndicator><udt:Indicator>false</udt:Indicator></ram:ChargeIndicator>
-						<ram:ActualAmount>{{.LineDiscount}}</ram:ActualAmount>
+						<ram:ActualAmount>{{.UnitDiscount}}</ram:ActualAmount>
 					</ram:AppliedTradeAllowanceCharge>
-					{{- end}}
 				</ram:GrossPriceProductTradePrice>
 				{{- end}}
 				<ram:NetPriceProductTradePrice>
-					<ram:ChargeAmount>{{.UnitPrice}}</ram:ChargeAmount>
+					<ram:ChargeAmount>{{.NetUnitPrice}}</ram:ChargeAmount>
 				</ram:NetPriceProductTradePrice>
 			</ram:SpecifiedLineTradeAgreement>
 			<ram:SpecifiedLineTradeDelivery>
-				<ram:BilledQuantity unitCode="{{$.UnitCode}}">{{.Quantity}}</ram:BilledQuantity>
+				<ram:BilledQuantity unitCode="{{xe $.UnitCode}}">{{.Quantity}}</ram:BilledQuantity>
 			</ram:SpecifiedLineTradeDelivery>
 			<ram:SpecifiedLineTradeSettlement>
 				<ram:ApplicableTradeTax>
 					<ram:TypeCode>VAT</ram:TypeCode>
 					<ram:CategoryCode>{{.TaxCategoryCode}}</ram:CategoryCode>
-					{{- if .TaxPercent}}
+					{{- if .HasTaxRate}}
 					<ram:RateApplicablePercent>{{.TaxPercent}}</ram:RateApplicablePercent>
 					{{- end}}
 				</ram:ApplicableTradeTax>
@@ -78,51 +86,38 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 			</ram:SpecifiedLineTradeSettlement>
 		</ram:IncludedSupplyChainTradeLineItem>
 		{{- end}}
-		{{- end}}
-
 		<ram:ApplicableHeaderTradeAgreement>
-			<ram:SellerTradeParty>
-				<ram:Name>{{xe .SellerName}}</ram:Name>
-				{{- if .SellerAddress}}
-				<ram:PostalTradeAddress>
-					{{- if .SellerAddress.PostalCode}}<ram:PostcodeCode>{{xe .SellerAddress.PostalCode}}</ram:PostcodeCode>{{- end}}
-					{{- if .SellerAddress.Address}}<ram:LineOne>{{xe .SellerAddress.Address}}</ram:LineOne>{{- end}}
-					{{- if .SellerAddress.Address2}}<ram:LineTwo>{{xe .SellerAddress.Address2}}</ram:LineTwo>{{- end}}
-					{{- if .SellerAddress.City}}<ram:CityName>{{xe .SellerAddress.City}}</ram:CityName>{{- end}}
-					{{- if .SellerAddress.Country}}<ram:CountryID>{{xe .SellerAddress.Country}}</ram:CountryID>{{- end}}
-				</ram:PostalTradeAddress>
-				{{- end}}
-				{{- if .SellerTaxID}}
-				<ram:SpecifiedTaxRegistration>
-					<ram:ID schemeID="VA">{{xe .SellerTaxID}}</ram:ID>
-				</ram:SpecifiedTaxRegistration>
-				{{- end}}
-			</ram:SellerTradeParty>
-			<ram:BuyerTradeParty>
-				<ram:Name>{{xe .BuyerName}}</ram:Name>
-				{{- if .BuyerAddress}}
-				<ram:PostalTradeAddress>
-					{{- if .BuyerAddress.PostalCode}}<ram:PostcodeCode>{{xe .BuyerAddress.PostalCode}}</ram:PostcodeCode>{{- end}}
-					{{- if .BuyerAddress.Address}}<ram:LineOne>{{xe .BuyerAddress.Address}}</ram:LineOne>{{- end}}
-					{{- if .BuyerAddress.Address2}}<ram:LineTwo>{{xe .BuyerAddress.Address2}}</ram:LineTwo>{{- end}}
-					{{- if .BuyerAddress.City}}<ram:CityName>{{xe .BuyerAddress.City}}</ram:CityName>{{- end}}
-					{{- if .BuyerAddress.Country}}<ram:CountryID>{{xe .BuyerAddress.Country}}</ram:CountryID>{{- end}}
-				</ram:PostalTradeAddress>
-				{{- end}}
-				{{- if .BuyerTaxID}}
-				<ram:SpecifiedTaxRegistration>
-					<ram:ID schemeID="VA">{{xe .BuyerTaxID}}</ram:ID>
-				</ram:SpecifiedTaxRegistration>
-				{{- end}}
-			</ram:BuyerTradeParty>
 			{{- if .BuyerReference}}
 			<ram:BuyerReference>{{xe .BuyerReference}}</ram:BuyerReference>
 			{{- end}}
+			<ram:SellerTradeParty>
+				{{- template "party" .Seller}}
+			</ram:SellerTradeParty>
+			<ram:BuyerTradeParty>
+				{{- template "party" .Buyer}}
+			</ram:BuyerTradeParty>
+			{{- if .PurchaseOrderReference}}
+			<ram:BuyerOrderReferencedDocument>
+				<ram:IssuerAssignedID>{{xe .PurchaseOrderReference}}</ram:IssuerAssignedID>
+			</ram:BuyerOrderReferencedDocument>
+			{{- end}}
 		</ram:ApplicableHeaderTradeAgreement>
-
+		{{- if .DeliveryDate}}
+		<ram:ApplicableHeaderTradeDelivery>
+			<ram:ActualDeliverySupplyChainEvent>
+				<ram:OccurrenceDateTime>
+					<udt:DateTimeString format="102">{{.DeliveryDate}}</udt:DateTimeString>
+				</ram:OccurrenceDateTime>
+			</ram:ActualDeliverySupplyChainEvent>
+		</ram:ApplicableHeaderTradeDelivery>
+		{{- else}}
 		<ram:ApplicableHeaderTradeDelivery/>
-
+		{{- end}}
 		<ram:ApplicableHeaderTradeSettlement>
+			{{- if .PaymentReference}}
+			<ram:PaymentReference>{{xe .PaymentReference}}</ram:PaymentReference>
+			{{- end}}
+			<ram:InvoiceCurrencyCode>{{.CurrencyCode}}</ram:InvoiceCurrencyCode>
 			{{- if .PaymentMeansCode}}
 			<ram:SpecifiedTradeSettlementPaymentMeans>
 				<ram:TypeCode>{{.PaymentMeansCode}}</ram:TypeCode>
@@ -130,51 +125,73 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 				<ram:PayeePartyCreditorFinancialAccount>
 					<ram:IBANID>{{xe .PaymentIBAN}}</ram:IBANID>
 				</ram:PayeePartyCreditorFinancialAccount>
+				{{- end}}
 				{{- if .PaymentBIC}}
 				<ram:PayeeSpecifiedCreditorFinancialInstitution>
 					<ram:BICID>{{xe .PaymentBIC}}</ram:BICID>
 				</ram:PayeeSpecifiedCreditorFinancialInstitution>
 				{{- end}}
-				{{- end}}
 			</ram:SpecifiedTradeSettlementPaymentMeans>
 			{{- end}}
-			<ram:InvoiceCurrencyCode>{{.CurrencyCode}}</ram:InvoiceCurrencyCode>
 			{{- range .TaxBreakdown}}
 			<ram:ApplicableTradeTax>
 				<ram:CalculatedAmount>{{.TaxAmount}}</ram:CalculatedAmount>
 				<ram:TypeCode>VAT</ram:TypeCode>
+				{{- if .ExemptionReason}}
+				<ram:ExemptionReason>{{xe .ExemptionReason}}</ram:ExemptionReason>
+				{{- end}}
 				<ram:BasisAmount>{{.BasisAmount}}</ram:BasisAmount>
 				<ram:CategoryCode>{{.CategoryCode}}</ram:CategoryCode>
-				{{- if .Percent}}
+				{{- if .ExemptionReasonCode}}
+				<ram:ExemptionReasonCode>{{xe .ExemptionReasonCode}}</ram:ExemptionReasonCode>
+				{{- end}}
+				{{- if .HasRate}}
 				<ram:RateApplicablePercent>{{.Percent}}</ram:RateApplicablePercent>
 				{{- end}}
 			</ram:ApplicableTradeTax>
+			{{- end}}
+			{{- if .PeriodStart}}
+			<ram:BillingSpecifiedPeriod>
+				<ram:StartDateTime>
+					<udt:DateTimeString format="102">{{.PeriodStart}}</udt:DateTimeString>
+				</ram:StartDateTime>
+				<ram:EndDateTime>
+					<udt:DateTimeString format="102">{{.PeriodEnd}}</udt:DateTimeString>
+				</ram:EndDateTime>
+			</ram:BillingSpecifiedPeriod>
 			{{- end}}
 			{{- range .DocAllowances}}
 			<ram:SpecifiedTradeAllowanceCharge>
 				<ram:ChargeIndicator><udt:Indicator>false</udt:Indicator></ram:ChargeIndicator>
 				<ram:ActualAmount>{{.ActualAmount}}</ram:ActualAmount>
+				<ram:ReasonCode>95</ram:ReasonCode>
+				<ram:Reason>{{xe .Reason}}</ram:Reason>
 				<ram:CategoryTradeTax>
 					<ram:TypeCode>VAT</ram:TypeCode>
 					<ram:CategoryCode>{{.CategoryCode}}</ram:CategoryCode>
-					{{- if .Percent}}
+					{{- if .HasRate}}
 					<ram:RateApplicablePercent>{{.Percent}}</ram:RateApplicablePercent>
 					{{- end}}
 				</ram:CategoryTradeTax>
 			</ram:SpecifiedTradeAllowanceCharge>
 			{{- end}}
-			{{- if .PaymentDueDate}}
+			{{- if or .PaymentTermsDescription .PaymentDueDate}}
 			<ram:SpecifiedTradePaymentTerms>
+				{{- if .PaymentTermsDescription}}
+				<ram:Description>{{xe .PaymentTermsDescription}}</ram:Description>
+				{{- end}}
+				{{- if .PaymentDueDate}}
 				<ram:DueDateDateTime>
 					<udt:DateTimeString format="102">{{.PaymentDueDate}}</udt:DateTimeString>
 				</ram:DueDateDateTime>
+				{{- end}}
 			</ram:SpecifiedTradePaymentTerms>
 			{{- end}}
 			<ram:SpecifiedTradeSettlementHeaderMonetarySummation>
-				{{- if .HasLineTotalAmount}}
+				{{- if .LineTotalAmount}}
 				<ram:LineTotalAmount>{{.LineTotalAmount}}</ram:LineTotalAmount>
 				{{- end}}
-				{{- if .HasAllowance}}
+				{{- if .AllowanceTotalAmount}}
 				<ram:AllowanceTotalAmount>{{.AllowanceTotalAmount}}</ram:AllowanceTotalAmount>
 				{{- end}}
 				<ram:TaxBasisTotalAmount>{{.TaxBasisTotalAmount}}</ram:TaxBasisTotalAmount>
@@ -184,7 +201,59 @@ const ciiXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 			</ram:SpecifiedTradeSettlementHeaderMonetarySummation>
 		</ram:ApplicableHeaderTradeSettlement>
 	</rsm:SupplyChainTradeTransaction>
-</rsm:CrossIndustryInvoice>`
+</rsm:CrossIndustryInvoice>
+{{- define "party"}}
+				<ram:Name>{{xe .Name}}</ram:Name>
+				{{- if .LegalID}}
+				<ram:SpecifiedLegalOrganization>
+					<ram:ID{{if .LegalIDSchemeID}} schemeID="{{xe .LegalIDSchemeID}}"{{end}}>{{xe .LegalID}}</ram:ID>
+				</ram:SpecifiedLegalOrganization>
+				{{- end}}
+				{{- if .Contact}}
+				<ram:DefinedTradeContact>
+					{{- if .Contact.Name}}
+					<ram:PersonName>{{xe .Contact.Name}}</ram:PersonName>
+					{{- end}}
+					{{- if .Contact.Phone}}
+					<ram:TelephoneUniversalCommunication>
+						<ram:CompleteNumber>{{xe .Contact.Phone}}</ram:CompleteNumber>
+					</ram:TelephoneUniversalCommunication>
+					{{- end}}
+					{{- if .Contact.Email}}
+					<ram:EmailURIUniversalCommunication>
+						<ram:URIID>{{xe .Contact.Email}}</ram:URIID>
+					</ram:EmailURIUniversalCommunication>
+					{{- end}}
+				</ram:DefinedTradeContact>
+				{{- end}}
+				{{- if .Address}}
+				<ram:PostalTradeAddress>
+					{{- if .Address.PostalCode}}
+					<ram:PostcodeCode>{{xe .Address.PostalCode}}</ram:PostcodeCode>
+					{{- end}}
+					{{- if .Address.Address}}
+					<ram:LineOne>{{xe .Address.Address}}</ram:LineOne>
+					{{- end}}
+					{{- if .Address.Address2}}
+					<ram:LineTwo>{{xe .Address.Address2}}</ram:LineTwo>
+					{{- end}}
+					{{- if .Address.City}}
+					<ram:CityName>{{xe .Address.City}}</ram:CityName>
+					{{- end}}
+					<ram:CountryID>{{xe .Address.Country}}</ram:CountryID>
+				</ram:PostalTradeAddress>
+				{{- end}}
+				{{- if .ElectronicAddress}}
+				<ram:URIUniversalCommunication>
+					<ram:URIID schemeID="{{xe .ElectronicAddressSchemeID}}">{{xe .ElectronicAddress}}</ram:URIID>
+				</ram:URIUniversalCommunication>
+				{{- end}}
+				{{- if .TaxID}}
+				<ram:SpecifiedTaxRegistration>
+					<ram:ID schemeID="VA">{{xe .TaxID}}</ram:ID>
+				</ram:SpecifiedTaxRegistration>
+				{{- end}}
+{{- end}}`
 
 type ciiAddress struct {
 	Address    string
@@ -194,62 +263,85 @@ type ciiAddress struct {
 	Country    string
 }
 
+type ciiContact struct {
+	Name  string
+	Phone string
+	Email string
+}
+
+type ciiParty struct {
+	Name                      string
+	LegalID                   string
+	LegalIDSchemeID           string
+	Contact                   *ciiContact
+	Address                   *ciiAddress
+	ElectronicAddress         string
+	ElectronicAddressSchemeID string
+	TaxID                     string
+}
+
 type ciiTaxLine struct {
-	TaxAmount    string
-	BasisAmount  string
-	CategoryCode string
-	Percent      string // empty for fixed-amount taxes
+	TaxAmount           string
+	BasisAmount         string
+	CategoryCode        string
+	ExemptionReason     string
+	ExemptionReasonCode string
+	HasRate             bool
+	Percent             string
 }
 
 type ciiAllowanceCharge struct {
 	ActualAmount string
+	Reason       string
 	CategoryCode string
-	Percent      string // empty for fixed-amount or no-tax groups
+	HasRate      bool
+	Percent      string
 }
 
 type ciiLineItem struct {
 	LineID          string
 	Name            string
 	Description     string
-	GrossUnitPrice  string // non-empty for EN16931+ when item has a discount
-	LineDiscount    string // discount per unit (EN16931+ only)
-	UnitPrice       string // net price per unit
+	GrossUnitPrice  string // set when the item has a discount
+	UnitDiscount    string // per-unit allowance, set with GrossUnitPrice
+	NetUnitPrice    string
 	Quantity        string
-	TaxPercent      string
 	TaxCategoryCode string
+	HasTaxRate      bool
+	TaxPercent      string
 	LineTotal       string
 }
 
 type ciiData struct {
-	GuidelineID          string
-	TypeCode             string
-	ID                   string
-	IssueDate            string
-	SellerName           string
-	SellerAddress        *ciiAddress
-	SellerTaxID          string
-	BuyerName            string
-	BuyerAddress         *ciiAddress
-	BuyerTaxID           string
-	BuyerReference       string
-	CurrencyCode         string
-	PaymentMeansCode     string
-	PaymentIBAN          string
-	PaymentBIC           string
-	PaymentDueDate       string
-	TaxCategoryCode      string
-	UnitCode             string
-	TaxBreakdown         []ciiTaxLine
-	DocAllowances        []ciiAllowanceCharge
-	HasAllowance         bool
-	AllowanceTotalAmount string
-	HasLineTotalAmount   bool
-	LineTotalAmount      string
-	TaxBasisTotalAmount  string
-	TaxTotalAmount       string
-	GrandTotalAmount     string
-	HasLineItems         bool
-	LineItems            []ciiLineItem
+	GuidelineID             string
+	BusinessProcessID       string
+	TypeCode                string
+	ID                      string
+	IssueDate               string
+	Notes                   []string
+	BuyerReference          string
+	PurchaseOrderReference  string
+	Seller                  ciiParty
+	Buyer                   ciiParty
+	DeliveryDate            string
+	CurrencyCode            string
+	PaymentReference        string
+	PaymentMeansCode        string
+	PaymentIBAN             string
+	PaymentBIC              string
+	TaxBreakdown            []ciiTaxLine
+	PeriodStart             string
+	PeriodEnd               string
+	DocAllowances           []ciiAllowanceCharge
+	PaymentTermsDescription string
+	PaymentDueDate          string
+	LineTotalAmount         string
+	AllowanceTotalAmount    string
+	TaxBasisTotalAmount     string
+	TaxTotalAmount          string
+	GrandTotalAmount        string
+	UnitCode                string
+	LineItems               []ciiLineItem
 }
 
 var ciiTmpl = template.Must(
@@ -266,6 +358,9 @@ func xmlEsc(s string) string {
 
 // BuildXML generates the CII XML bytes for the given document and options.
 // doc.Validate() (called by doc.Build()) must have run before calling this.
+//
+// The document and options are validated against the EN 16931 business rules
+// that can be checked up front; see the Err* sentinels for what is rejected.
 func BuildXML(doc *generator.Document, opts Options) ([]byte, error) {
 	data, err := buildCIIData(doc, opts)
 	if err != nil {
@@ -277,316 +372,379 @@ func BuildXML(doc *generator.Document, opts Options) ([]byte, error) {
 		return nil, fmt.Errorf("facturx: XML template: %w", err)
 	}
 
-	// Collapse excessive blank lines produced by template whitespace.
-	out := strings.TrimSpace(buf.String())
-	return []byte(out), nil
+	return []byte(strings.TrimSpace(buf.String())), nil
 }
 
 func buildCIIData(doc *generator.Document, opts Options) (*ciiData, error) {
-	issueDate, err := formatDate(doc.Date)
-	if err != nil {
-		issueDate = time.Now().Format("20060102")
+	profile := opts.profile()
+	minimum := profile == ProfileMinimum
+	basicWLPlus := !minimum
+	basicPlus := basicWLPlus && profile != ProfileBasicWL
+	en16931Plus := profile == ProfileEN16931 || profile == ProfileExtended
+
+	var errs []error
+	fail := func(err error) {
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
 
-	profile := opts.profile()
-	isEN16931Plus := profile == ProfileEN16931 || profile == ProfileExtended
+	// ---- Header ----
+
+	issueDate, err := formatDate("document date", doc.Date)
+	fail(err)
+
+	currency := strings.ToUpper(strings.TrimSpace(opts.currencyCode()))
+	if !currencyCodeRe.MatchString(currency) {
+		fail(fmt.Errorf("currency %q: %w", currency, ErrInvalidCurrencyCode))
+	}
 
 	d := &ciiData{
-		GuidelineID:     profile.guidelineID(),
-		TypeCode:        opts.typeCode(),
-		ID:              doc.Ref,
-		IssueDate:       issueDate,
-		SellerName:      doc.Company.Name,
-		SellerTaxID:     opts.SellerTaxID,
-		BuyerName:       doc.Customer.Name,
-		BuyerTaxID:      opts.BuyerTaxID,
-		BuyerReference:  opts.BuyerReference,
-		CurrencyCode:    opts.currencyCode(),
-		PaymentMeansCode: opts.paymentMeansCode(),
-		PaymentIBAN:     opts.PaymentIBAN,
-		PaymentBIC:      opts.PaymentBIC,
-		PaymentDueDate:  opts.PaymentDueDate,
-		TaxCategoryCode: opts.taxCategoryCode(),
-		UnitCode:        opts.itemDefaultUnitCode(),
+		GuidelineID:            profile.guidelineID(),
+		BusinessProcessID:      opts.BusinessProcessID,
+		TypeCode:               opts.typeCode(),
+		ID:                     doc.Ref,
+		IssueDate:              issueDate,
+		BuyerReference:         opts.BuyerReference,
+		PurchaseOrderReference: opts.PurchaseOrderReference,
+		CurrencyCode:           currency,
+		UnitCode:               opts.itemDefaultUnitCode(),
 	}
 
-	// Seller address — MINIMUM only gets CountryID.
-	if doc.Company.Address != nil {
-		a := &ciiAddress{Country: opts.sellerCountryCode(doc)}
-		if profile != ProfileMinimum {
-			a.Address = doc.Company.Address.Address
-			a.Address2 = doc.Company.Address.Address2
-			a.PostalCode = doc.Company.Address.PostalCode
-			a.City = doc.Company.Address.City
-		}
-		d.SellerAddress = a
+	if basicWLPlus {
+		d.Notes = opts.notes(doc)
 	}
 
-	// Buyer address — MINIMUM only gets CountryID.
-	if doc.Customer.Address != nil {
-		a := &ciiAddress{Country: opts.buyerCountryCode(doc)}
-		if profile != ProfileMinimum {
-			a.Address = doc.Customer.Address.Address
-			a.Address2 = doc.Customer.Address.Address2
-			a.PostalCode = doc.Customer.Address.PostalCode
-			a.City = doc.Customer.Address.City
-		}
-		d.BuyerAddress = a
+	// ---- Parties ----
+
+	if opts.SellerTaxID == "" && opts.SellerLegalID == "" {
+		fail(ErrMissingSellerID)
 	}
 
-	// Monetary totals.
-	lineTotal := doc.TotalWithoutTaxAndWithoutDocumentDiscount()
-	taxBasis := doc.TotalWithoutTax()
-	taxTotal := doc.Tax()
-	grandTotal := doc.TotalWithTax()
-
-	d.LineTotalAmount = lineTotal.StringFixed(2)
-	d.TaxBasisTotalAmount = taxBasis.StringFixed(2)
-	d.TaxTotalAmount = taxTotal.StringFixed(2)
-	d.GrandTotalAmount = grandTotal.StringFixed(2)
-
-	// MINIMUM profile omits tax breakdown, payment terms, line total.
-	if profile == ProfileMinimum {
-		d.PaymentDueDate = ""
-		d.PaymentIBAN = ""
-		d.PaymentBIC = ""
-		d.PaymentMeansCode = ""
-		return d, nil
+	sellerCountry, err := normalizeCountry("seller country", opts.sellerCountryCode(doc), true)
+	fail(err)
+	d.Seller = ciiParty{
+		Name:            doc.Company.Name,
+		LegalID:         opts.SellerLegalID,
+		LegalIDSchemeID: opts.SellerLegalIDSchemeID,
+		TaxID:           opts.SellerTaxID,
+		Address:         buildAddress(doc.Company.Address, sellerCountry, minimum),
 	}
-
-	d.HasLineTotalAmount = true
-	d.TaxBreakdown = buildTaxBreakdown(doc, opts.taxCategoryCode())
-
-	// Document-level allowances (EN16931+).
-	if isEN16931Plus && doc.Discount != nil {
-		allowances, total := buildDocAllowances(doc, opts.taxCategoryCode())
-		if len(allowances) > 0 {
-			d.DocAllowances = allowances
-			d.HasAllowance = true
-			d.AllowanceTotalAmount = total.StringFixed(2)
+	if basicWLPlus && opts.SellerElectronicAddress != "" {
+		d.Seller.ElectronicAddress = opts.SellerElectronicAddress
+		d.Seller.ElectronicAddressSchemeID = opts.sellerElectronicAddressSchemeID()
+	}
+	if en16931Plus && (opts.SellerContactName != "" || opts.SellerContactPhone != "" || opts.SellerContactEmail != "") {
+		d.Seller.Contact = &ciiContact{
+			Name:  opts.SellerContactName,
+			Phone: opts.SellerContactPhone,
+			Email: opts.SellerContactEmail,
 		}
 	}
 
-	// Line items — BASIC and above.
-	if profile != ProfileBasicWL {
-		d.HasLineItems = true
-		d.LineItems = buildLineItems(doc, opts.taxCategoryCode(), isEN16931Plus)
+	// Buyer address is optional in MINIMUM, mandatory above (BR-10, BR-11).
+	buyerCountry, err := normalizeCountry("buyer country", opts.buyerCountryCode(doc), basicWLPlus)
+	fail(err)
+	d.Buyer = ciiParty{
+		Name:            doc.Customer.Name,
+		LegalID:         opts.BuyerLegalID,
+		LegalIDSchemeID: opts.BuyerLegalIDSchemeID,
+		Address:         buildAddress(doc.Customer.Address, buyerCountry, minimum),
+	}
+	if basicWLPlus {
+		d.Buyer.TaxID = opts.BuyerTaxID
+		if opts.BuyerElectronicAddress != "" {
+			d.Buyer.ElectronicAddress = opts.BuyerElectronicAddress
+			d.Buyer.ElectronicAddressSchemeID = opts.buyerElectronicAddressSchemeID()
+		}
+	}
+
+	// ---- Delivery, period, payment (BASIC-WL and above) ----
+
+	if basicWLPlus {
+		d.DeliveryDate, err = optionalDate("delivery date", opts.DeliveryDate)
+		fail(err)
+
+		if (opts.InvoicingPeriodStart == "") != (opts.InvoicingPeriodEnd == "") {
+			fail(ErrInvalidPeriod)
+		}
+		d.PeriodStart, err = optionalDate("invoicing period start", opts.InvoicingPeriodStart)
+		fail(err)
+		d.PeriodEnd, err = optionalDate("invoicing period end", opts.InvoicingPeriodEnd)
+		fail(err)
+
+		d.PaymentReference = opts.PaymentReference
+		d.PaymentMeansCode = opts.paymentMeansCode()
+		d.PaymentIBAN = opts.PaymentIBAN
+		if en16931Plus {
+			d.PaymentBIC = opts.PaymentBIC
+		}
+		d.PaymentTermsDescription = opts.PaymentTermsDescription
+
+		d.PaymentDueDate, err = optionalDate("payment due date", opts.PaymentDueDate)
+		fail(err)
+		if d.PaymentDueDate == "" && doc.PaymentTerm != "" {
+			// doc.PaymentTerm is free text on the PDF; use it only when it is a date.
+			if due, derr := formatDate("payment term", doc.PaymentTerm); derr == nil {
+				d.PaymentDueDate = due
+			}
+		}
+	}
+
+	// ---- Lines and totals ----
+
+	totals, err := computeTotals(doc, opts, profile)
+	fail(err)
+
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("facturx: %w", errors.Join(errs...))
+	}
+
+	d.TaxBasisTotalAmount = totals.taxBasis.StringFixed(2)
+	d.TaxTotalAmount = totals.tax.StringFixed(2)
+	d.GrandTotalAmount = totals.grand.StringFixed(2)
+
+	if basicWLPlus {
+		d.LineTotalAmount = totals.lineTotal.StringFixed(2)
+		if totals.allowanceTotal.Sign() != 0 {
+			d.AllowanceTotalAmount = totals.allowanceTotal.StringFixed(2)
+		}
+		for _, g := range totals.groups {
+			d.TaxBreakdown = append(d.TaxBreakdown, ciiTaxLine{
+				TaxAmount:           g.tax.StringFixed(2),
+				BasisAmount:         g.basis().StringFixed(2),
+				CategoryCode:        g.category,
+				ExemptionReason:     g.exemptionReason,
+				ExemptionReasonCode: g.exemptionReasonCode,
+				HasRate:             g.hasRate,
+				Percent:             g.percent.StringFixed(2),
+			})
+			if g.allowance.Sign() != 0 {
+				d.DocAllowances = append(d.DocAllowances, ciiAllowanceCharge{
+					ActualAmount: g.allowance.StringFixed(2),
+					Reason:       opts.documentDiscountReason(),
+					CategoryCode: g.category,
+					HasRate:      g.hasRate,
+					Percent:      g.percent.StringFixed(2),
+				})
+			}
+		}
+
+		if totals.grand.Sign() > 0 && d.PaymentDueDate == "" && d.PaymentTermsDescription == "" {
+			return nil, fmt.Errorf("facturx: %w", ErrMissingPaymentTerms)
+		}
+	}
+
+	if basicPlus {
+		d.LineItems = buildLineItems(doc, totals.lines, en16931Plus)
 	}
 
 	return d, nil
 }
 
-// buildTaxBreakdown groups items by effective tax rate and computes per-rate
-// basis/tax amounts, accounting for the document-level discount.
-func buildTaxBreakdown(doc *generator.Document, categoryCode string) []ciiTaxLine {
-	type group struct {
-		percent     decimal.Decimal
-		isFixed     bool
-		basisAmount decimal.Decimal
-		taxAmount   decimal.Decimal
+// buildAddress maps a generator address. MINIMUM only carries the country.
+func buildAddress(a *generator.Address, country string, minimum bool) *ciiAddress {
+	if a == nil && country == "" {
+		return nil
 	}
-
-	groups := make(map[string]*group)
-	totalPreDiscount := decimal.Zero
-
-	for _, item := range doc.Items {
-		basis := item.TotalWithoutTaxAndWithDiscount()
-		totalPreDiscount = totalPreDiscount.Add(basis)
-
-		if item.Tax == nil {
-			continue
-		}
-
-		switch {
-		case item.Tax.Percent != "":
-			key := item.Tax.Percent
-			if _, ok := groups[key]; !ok {
-				p, _ := decimal.NewFromString(item.Tax.Percent)
-				groups[key] = &group{percent: p}
-			}
-			g := groups[key]
-			g.basisAmount = g.basisAmount.Add(basis)
-			g.taxAmount = g.taxAmount.Add(item.TaxWithTotalDiscounted())
-
-		case item.Tax.Amount != "":
-			key := "__fixed__"
-			if _, ok := groups[key]; !ok {
-				groups[key] = &group{isFixed: true}
-			}
-			g := groups[key]
-			g.basisAmount = g.basisAmount.Add(basis)
-			g.taxAmount = g.taxAmount.Add(item.TaxWithTotalDiscounted())
-		}
+	addr := &ciiAddress{Country: country}
+	if a != nil && !minimum {
+		addr.Address = a.Address
+		addr.Address2 = a.Address2
+		addr.PostalCode = a.PostalCode
+		addr.City = a.City
 	}
-
-	// Apply document-level discount proportionally.
-	if doc.Discount != nil && !totalPreDiscount.IsZero() {
-		discountedTotal := doc.TotalWithoutTax()
-		discountFactor := discountedTotal.Div(totalPreDiscount)
-		for _, g := range groups {
-			if g.isFixed {
-				g.basisAmount = g.basisAmount.Mul(discountFactor)
-			} else {
-				discountedBasis := g.basisAmount.Mul(discountFactor)
-				g.taxAmount = discountedBasis.Mul(g.percent).Div(decimal.NewFromFloat(100))
-				g.basisAmount = discountedBasis
-			}
-		}
+	if addr.Country == "" {
+		// Country is mandatory inside PostalTradeAddress; without it the
+		// address cannot be emitted at all.
+		return nil
 	}
-
-	// Stable ordering: percent-based rates first (sorted), then fixed.
-	var percentKeys []string
-	hasFixed := false
-	for k, g := range groups {
-		if g.isFixed {
-			hasFixed = true
-		} else {
-			percentKeys = append(percentKeys, k)
-		}
-	}
-	for i := 0; i < len(percentKeys)-1; i++ {
-		for j := i + 1; j < len(percentKeys); j++ {
-			if percentKeys[i] > percentKeys[j] {
-				percentKeys[i], percentKeys[j] = percentKeys[j], percentKeys[i]
-			}
-		}
-	}
-
-	var lines []ciiTaxLine
-	for _, k := range percentKeys {
-		g := groups[k]
-		lines = append(lines, ciiTaxLine{
-			TaxAmount:    g.taxAmount.StringFixed(2),
-			BasisAmount:  g.basisAmount.StringFixed(2),
-			CategoryCode: categoryCode,
-			Percent:      g.percent.StringFixed(2),
-		})
-	}
-	if hasFixed {
-		g := groups["__fixed__"]
-		lines = append(lines, ciiTaxLine{
-			TaxAmount:    g.taxAmount.StringFixed(2),
-			BasisAmount:  g.basisAmount.StringFixed(2),
-			CategoryCode: categoryCode,
-		})
-	}
-
-	return lines
+	return addr
 }
 
-// buildDocAllowances computes document-level allowance charges per tax rate,
-// required for EN16931+ when a document discount is present.
-func buildDocAllowances(doc *generator.Document, categoryCode string) ([]ciiAllowanceCharge, decimal.Decimal) {
-	if doc.Discount == nil {
-		return nil, decimal.Zero
-	}
+// ---- Monetary computation ----
 
-	type group struct {
-		percent decimal.Decimal
-		isFixed bool
-		basis   decimal.Decimal // pre-discount basis for this rate group
-	}
-
-	groups := make(map[string]*group)
-	for _, item := range doc.Items {
-		basis := item.TotalWithoutTaxAndWithDiscount()
-		if item.Tax == nil || (item.Tax.Percent == "" && item.Tax.Amount == "") {
-			key := "__notax__"
-			if _, ok := groups[key]; !ok {
-				groups[key] = &group{isFixed: true}
-			}
-			groups[key].basis = groups[key].basis.Add(basis)
-			continue
-		}
-		if item.Tax.Percent != "" {
-			key := item.Tax.Percent
-			if _, ok := groups[key]; !ok {
-				p, _ := decimal.NewFromString(item.Tax.Percent)
-				groups[key] = &group{percent: p}
-			}
-			groups[key].basis = groups[key].basis.Add(basis)
-		} else {
-			key := "__fixed__"
-			if _, ok := groups[key]; !ok {
-				groups[key] = &group{isFixed: true}
-			}
-			groups[key].basis = groups[key].basis.Add(basis)
-		}
-	}
-
-	totalPreDiscount := doc.TotalWithoutTaxAndWithoutDocumentDiscount()
-	totalPostDiscount := doc.TotalWithoutTax()
-	if totalPreDiscount.IsZero() {
-		return nil, decimal.Zero
-	}
-
-	totalDiscount := totalPreDiscount.Sub(totalPostDiscount)
-	discountRatio := totalDiscount.Div(totalPreDiscount)
-
-	var allowances []ciiAllowanceCharge
-	for key, g := range groups {
-		amount := g.basis.Mul(discountRatio)
-		ac := ciiAllowanceCharge{
-			ActualAmount: amount.StringFixed(2),
-			CategoryCode: categoryCode,
-		}
-		if !g.isFixed && key != "__notax__" {
-			ac.Percent = g.percent.StringFixed(2)
-		}
-		allowances = append(allowances, ac)
-	}
-
-	return allowances, totalDiscount
+// taxGroup is one VAT breakdown line: the generator groups that share an
+// effective VAT category and rate once option defaults apply (BR-CO-18).
+type taxGroup struct {
+	category            string
+	percent             decimal.Decimal
+	hasRate             bool
+	exemptionReason     string
+	exemptionReasonCode string
+	lineSum             decimal.Decimal // sum of rounded line net amounts
+	allowance           decimal.Decimal // share of the document discount
+	tax                 decimal.Decimal
 }
 
-func buildLineItems(doc *generator.Document, categoryCode string, withGrossPrice bool) []ciiLineItem {
-	items := make([]ciiLineItem, len(doc.Items))
+func (g *taxGroup) basis() decimal.Decimal { return g.lineSum.Sub(g.allowance) }
+
+type lineAmounts struct {
+	tax       lineTax
+	lineTotal decimal.Decimal // rounded net amount
+}
+
+type totals struct {
+	lines          []lineAmounts
+	groups         []*taxGroup
+	lineTotal      decimal.Decimal
+	allowanceTotal decimal.Decimal
+	taxBasis       decimal.Decimal
+	tax            decimal.Decimal
+	grand          decimal.Decimal
+}
+
+// computeTotals maps the generator's Breakdown onto the VAT breakdown. Every
+// amount comes from doc.Breakdown(), the same figures the PDF prints, so the
+// XML and the PDF always agree and the EN 16931 identities (BR-CO-10, 11, 13,
+// 14, 15) hold by construction.
+//
+// Generator groups are keyed by the raw Tax.Category. Several of them can map
+// to one effective category once defaults apply; their rounded amounts are
+// then summed, which BR-CO-17 tolerates.
+func computeTotals(doc *generator.Document, opts Options, profile Profile) (*totals, error) {
+	if doc.Options != nil && doc.Options.CurrencyPrecision > 2 {
+		return nil, fmt.Errorf("currency precision %d: %w", doc.Options.CurrencyPrecision, ErrUnsupportedPrecision)
+	}
+
+	bd := doc.Breakdown()
+	t := &totals{
+		lineTotal:      bd.LineTotal,
+		allowanceTotal: bd.Allowance,
+		taxBasis:       bd.TaxBasis,
+		tax:            bd.Tax,
+		grand:          bd.GrandTotal,
+	}
+
+	var errs []error
 	for i, item := range doc.Items {
-		unitCost, _ := decimal.NewFromString(item.UnitCost)
-		qty, _ := decimal.NewFromString(item.Quantity)
-		lineTotal := item.TotalWithoutTaxAndWithDiscount()
-
-		var netUnitPrice decimal.Decimal
-		if !qty.IsZero() {
-			netUnitPrice = lineTotal.Div(qty)
+		lt, err := resolveLineTax(item, opts)
+		if err != nil {
+			errs = append(errs, err)
+			continue
 		}
+		if lt.fixedAmount && profile != ProfileMinimum {
+			errs = append(errs, fmt.Errorf("item %q: %w", item.Name, ErrFixedAmountTax))
+		}
+		t.lines = append(t.lines, lineAmounts{tax: lt, lineTotal: bd.Lines[i]})
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	byKey := map[string]*taxGroup{}
+	for _, g := range bd.Groups {
+		if g.Fixed {
+			// Only reachable in MINIMUM, which has no breakdown; the amount is
+			// already part of bd.Tax.
+			continue
+		}
+		eg := effectiveGroup(g, opts)
+		key := eg.category + "|" + eg.percent.String()
+		if existing, ok := byKey[key]; ok {
+			existing.lineSum = existing.lineSum.Add(eg.lineSum)
+			existing.allowance = existing.allowance.Add(eg.allowance)
+			existing.tax = existing.tax.Add(eg.tax)
+			mergeReasons(existing, eg)
+			continue
+		}
+		byKey[key] = eg
+		t.groups = append(t.groups, eg)
+	}
+
+	sort.Slice(t.groups, func(i, j int) bool {
+		if t.groups[i].category != t.groups[j].category {
+			return t.groups[i].category < t.groups[j].category
+		}
+		return t.groups[i].percent.Cmp(t.groups[j].percent) < 0
+	})
+
+	return t, nil
+}
+
+// effectiveGroup applies the option defaults to a generator tax group.
+func effectiveGroup(g *generator.TaxGroup, opts Options) *taxGroup {
+	eg := &taxGroup{
+		percent:   g.Percent,
+		hasRate:   true,
+		lineSum:   g.LineTotal,
+		allowance: g.Allowance,
+		tax:       g.Tax,
+	}
+	if g.Untaxed {
+		eg.category = opts.noTaxCategoryCode()
+		eg.exemptionReason = opts.NoTaxExemptionReason
+		eg.exemptionReasonCode = opts.NoTaxExemptionReasonCode
+	} else {
+		eg.category = g.Category
+		if eg.category == "" {
+			eg.category = opts.taxCategoryCode()
+		}
+		eg.exemptionReason = g.ExemptionReason
+		eg.exemptionReasonCode = g.ExemptionReasonCode
+	}
+	eg.category = strings.ToUpper(strings.TrimSpace(eg.category))
+	if vatCategories[eg.category].noRate {
+		eg.hasRate = false
+	}
+	return eg
+}
+
+// mergeReasons folds src's exemption reasons into dst: every distinct reason
+// text is kept, the first reason code wins.
+func mergeReasons(dst, src *taxGroup) {
+	if src.exemptionReason != "" && !strings.Contains(dst.exemptionReason, src.exemptionReason) {
+		if dst.exemptionReason != "" {
+			dst.exemptionReason += "; "
+		}
+		dst.exemptionReason += src.exemptionReason
+	}
+	if dst.exemptionReasonCode == "" {
+		dst.exemptionReasonCode = src.exemptionReasonCode
+	}
+}
+
+func buildLineItems(doc *generator.Document, lines []lineAmounts, withDescription bool) []ciiLineItem {
+	items := make([]ciiLineItem, 0, len(doc.Items))
+	for i, item := range doc.Items {
+		la := lines[i]
+		gross, _ := decimal.NewFromString(item.UnitCost)
+		qty, _ := decimal.NewFromString(item.Quantity)
 
 		li := ciiLineItem{
 			LineID:          fmt.Sprintf("%d", i+1),
 			Name:            item.Name,
-			Description:     item.Description,
-			UnitPrice:       netUnitPrice.StringFixed(2),
-			Quantity:        item.Quantity,
-			TaxCategoryCode: categoryCode,
-			LineTotal:       lineTotal.StringFixed(2),
+			Quantity:        qty.String(),
+			TaxCategoryCode: la.tax.category,
+			HasTaxRate:      la.tax.hasRate,
+			TaxPercent:      la.tax.percent.StringFixed(2),
+			LineTotal:       la.lineTotal.StringFixed(2),
+		}
+		if withDescription {
+			li.Description = item.Description
 		}
 
-		// Gross price and per-unit discount for EN16931+.
-		if withGrossPrice && item.Discount != nil {
-			li.GrossUnitPrice = unitCost.StringFixed(2)
-			discountPerUnit := unitCost.Sub(netUnitPrice)
-			li.LineDiscount = discountPerUnit.StringFixed(2)
+		net := gross
+		if item.Discount != nil && !qty.IsZero() {
+			lineDiscount := item.TotalWithoutTaxAndWithoutDiscount().Sub(item.TotalWithoutTaxAndWithDiscount())
+			unitDiscount := lineDiscount.Div(qty).Round(4)
+			net = gross.Sub(unitDiscount)
+			li.GrossUnitPrice = fmtPrice(gross)
+			li.UnitDiscount = fmtPrice(unitDiscount)
 		}
+		li.NetUnitPrice = fmtPrice(net)
 
-		if item.Tax != nil && item.Tax.Percent != "" {
-			li.TaxPercent = item.Tax.Percent
-		}
-
-		items[i] = li
+		items = append(items, li)
 	}
 	return items
 }
 
-// formatDate converts "DD/MM/YYYY" or "YYYY-MM-DD" to "YYYYMMDD" (CII format 102).
-func formatDate(date string) (string, error) {
-	if t, err := time.Parse("02/01/2006", date); err == nil {
-		return t.Format("20060102"), nil
+// fmtPrice renders a unit price with 2 decimals, or 4 when needed to keep the
+// value exact (EN 16931 allows more than 2 decimals for prices).
+func fmtPrice(d decimal.Decimal) string {
+	d = d.Round(4)
+	if d.Equal(d.Round(2)) {
+		return d.StringFixed(2)
 	}
-	if t, err := time.Parse("2006-01-02", date); err == nil {
-		return t.Format("20060102"), nil
-	}
-	if len(date) == 8 {
-		return date, nil
-	}
-	return "", fmt.Errorf("facturx: cannot parse date %q", date)
+	return d.StringFixed(4)
 }

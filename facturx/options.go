@@ -3,58 +3,152 @@ package facturx
 import generator "github.com/angelodlfrtr/go-invoice-generator/generator"
 
 // Options holds Factur-X-specific data that cannot be derived from the generator.Document.
+//
+// Dates accept "DD/MM/YYYY", "YYYY-MM-DD" or "YYYYMMDD". Country codes must be
+// ISO 3166-1 alpha-2 and currency codes ISO 4217; both are validated.
+//
+// Fields are grouped by the Factur-X profile that first carries them. Fields
+// set for a lower profile than the one they belong to are silently omitted
+// from the XML.
 type Options struct {
 	// Profile is the Factur-X conformance level. Defaults to ProfileMinimum.
 	Profile Profile
 
+	// ---- Document (all profiles) ----
+
 	// CurrencyCode is the ISO 4217 currency code. Defaults to "EUR".
 	CurrencyCode string
-
-	// SellerTaxID is the seller's VAT registration number (e.g. "FR12345678901").
-	// Required for most profiles.
-	SellerTaxID string
-
-	// SellerCountryCode is the seller's ISO 3166-1 alpha-2 country code used in
-	// the CII XML address. Falls back to doc.Company.Address.Country when empty.
-	SellerCountryCode string
-
-	// BuyerCountryCode is the buyer's ISO 3166-1 alpha-2 country code used in
-	// the CII XML address. Falls back to doc.Customer.Address.Country when empty.
-	BuyerCountryCode string
-
-	// BuyerReference is the buyer's internal reference (e.g. a purchase order number).
-	BuyerReference string
-
-	// BuyerTaxID is the buyer's VAT registration number. Rendered in
-	// BuyerTradeParty/SpecifiedTaxRegistration for BASIC-WL and above.
-	BuyerTaxID string
-
-	// PaymentDueDate is the payment due date in "YYYYMMDD" format.
-	PaymentDueDate string
-
-	// PaymentIBAN is the seller's IBAN for bank transfer payment.
-	PaymentIBAN string
-
-	// PaymentBIC is the seller's BIC/SWIFT code for bank transfer payment.
-	PaymentBIC string
-
-	// PaymentMeansCode is the UN/ECE 4461 payment means type code (e.g. "30" for
-	// credit transfer, "58" for SEPA credit transfer). Defaults to "58" when
-	// PaymentIBAN is set. Required for EN16931/EXTENDED when payment means are present.
-	PaymentMeansCode string
-
-	// TaxCategoryCode is the default VAT category code applied when a tax rate has no
-	// explicit category. Common values: "S" (standard), "E" (exempt), "Z" (zero-rated),
-	// "G" (export). Defaults to "S".
-	TaxCategoryCode string
 
 	// TypeCode is the UN/CEFACT document type code. Defaults to "380" (invoice).
 	// Other common values: "381" (credit note), "84" (delivery note).
 	TypeCode string
 
+	// BusinessProcessID is the business process context (BT-23), e.g.
+	// "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0" for Peppol / XRechnung.
+	BusinessProcessID string
+
+	// BuyerReference is the buyer's internal routing reference (BT-10), such
+	// as a cost centre or the Leitweg-ID. For a purchase order number use
+	// PurchaseOrderReference.
+	BuyerReference string
+
+	// PurchaseOrderReference is the buyer's purchase order number (BT-13).
+	PurchaseOrderReference string
+
+	// ---- Seller (all profiles unless noted) ----
+
+	// SellerTaxID is the seller's VAT registration number (e.g. "FR12345678901").
+	// Either SellerTaxID or SellerLegalID is required (BR-CO-26).
+	SellerTaxID string
+
+	// SellerLegalID is the seller's legal registration identifier (BT-30),
+	// e.g. the SIREN in France. SellerLegalIDSchemeID is the ISO 6523 ICD of
+	// the register, e.g. "0002" for SIRENE or "0088" for GLN; it is optional.
+	SellerLegalID         string
+	SellerLegalIDSchemeID string
+
+	// SellerCountryCode is the seller's ISO 3166-1 alpha-2 country code used in
+	// the CII XML address. Falls back to doc.Company.Address.Country when empty.
+	SellerCountryCode string
+
+	// SellerElectronicAddress is the seller's electronic address (BT-34), with
+	// SellerElectronicAddressSchemeID the EAS scheme ("EM" for e-mail,
+	// "0009" for SIRET, "0088" for GLN...). Scheme defaults to "EM".
+	// BASIC-WL and above.
+	SellerElectronicAddress         string
+	SellerElectronicAddressSchemeID string
+
+	// SellerContactName, SellerContactPhone and SellerContactEmail fill the
+	// seller contact group (BG-6). EN 16931 and above.
+	SellerContactName  string
+	SellerContactPhone string
+	SellerContactEmail string
+
+	// ---- Buyer ----
+
+	// BuyerTaxID is the buyer's VAT registration number. BASIC-WL and above.
+	BuyerTaxID string
+
+	// BuyerLegalID is the buyer's legal registration identifier (BT-47) with
+	// its optional ISO 6523 scheme. All profiles.
+	BuyerLegalID         string
+	BuyerLegalIDSchemeID string
+
+	// BuyerCountryCode is the buyer's ISO 3166-1 alpha-2 country code used in
+	// the CII XML address. Falls back to doc.Customer.Address.Country when empty.
+	BuyerCountryCode string
+
+	// BuyerElectronicAddress is the buyer's electronic address (BT-49), see
+	// SellerElectronicAddress. BASIC-WL and above.
+	BuyerElectronicAddress         string
+	BuyerElectronicAddressSchemeID string
+
+	// ---- Delivery and period (BASIC-WL and above) ----
+
+	// DeliveryDate is the actual delivery date (BT-72).
+	DeliveryDate string
+
+	// InvoicingPeriodStart and InvoicingPeriodEnd define the invoicing
+	// period (BG-14). Both must be set together.
+	InvoicingPeriodStart string
+	InvoicingPeriodEnd   string
+
+	// ---- Payment (BASIC-WL and above) ----
+
+	// PaymentDueDate is the payment due date. When empty, doc.PaymentTerm is
+	// used if it parses as a date. EN 16931 requires either a due date or a
+	// PaymentTermsDescription when an amount is due (BR-CO-25).
+	PaymentDueDate string
+
+	// PaymentTermsDescription is the free-text payment terms (BT-20).
+	PaymentTermsDescription string
+
+	// PaymentReference is the remittance information (BT-83) the buyer should
+	// quote when paying.
+	PaymentReference string
+
+	// PaymentIBAN is the seller's IBAN for bank transfer payment.
+	PaymentIBAN string
+
+	// PaymentBIC is the seller's BIC/SWIFT code. EN 16931 and above.
+	PaymentBIC string
+
+	// PaymentMeansCode is the UN/ECE 4461 payment means type code (e.g. "30" for
+	// credit transfer, "58" for SEPA credit transfer). Defaults to "58" when
+	// PaymentIBAN is set.
+	PaymentMeansCode string
+
+	// ---- Notes (BASIC-WL and above) ----
+
+	// Notes are free-text document notes (BT-22). When empty, doc.Notes is
+	// used if set.
+	Notes []string
+
+	// ---- Taxes ----
+
+	// TaxCategoryCode is the VAT category code applied to items whose Tax has
+	// no Category. Defaults to "S" (standard rate).
+	TaxCategoryCode string
+
+	// NoTaxCategoryCode is the VAT category code applied to items without a
+	// Tax. Defaults to "E" (exempt). NoTaxExemptionReason and
+	// NoTaxExemptionReasonCode give the mandatory reason for that category,
+	// e.g. "TVA non applicable, art. 293 B du CGI".
+	NoTaxCategoryCode        string
+	NoTaxExemptionReason     string
+	NoTaxExemptionReasonCode string
+
+	// DocumentDiscountReason is the reason text for the document-level
+	// allowance generated from doc.Discount (BT-97). Defaults to "Discount".
+	DocumentDiscountReason string
+
+	// ---- Items (BASIC and above) ----
+
 	// ItemDefaultUnitCode is the UN/ECE recommendation 20 unit code applied to all
 	// line items. Defaults to "C62" (piece/unit).
 	ItemDefaultUnitCode string
+
+	// ---- PDF ----
 
 	// ShowIcon places the Factur-X profile icon in the bottom-right corner of
 	// the first page as a compliance mark. Defaults to false.
@@ -80,6 +174,20 @@ func (o Options) taxCategoryCode() string {
 		return o.TaxCategoryCode
 	}
 	return "S"
+}
+
+func (o Options) noTaxCategoryCode() string {
+	if o.NoTaxCategoryCode != "" {
+		return o.NoTaxCategoryCode
+	}
+	return "E"
+}
+
+func (o Options) documentDiscountReason() string {
+	if o.DocumentDiscountReason != "" {
+		return o.DocumentDiscountReason
+	}
+	return "Discount"
 }
 
 func (o Options) typeCode() string {
@@ -124,4 +232,28 @@ func (o Options) buyerCountryCode(doc *generator.Document) string {
 		return doc.Customer.Address.Country
 	}
 	return ""
+}
+
+func (o Options) sellerElectronicAddressSchemeID() string {
+	if o.SellerElectronicAddressSchemeID != "" {
+		return o.SellerElectronicAddressSchemeID
+	}
+	return "EM"
+}
+
+func (o Options) buyerElectronicAddressSchemeID() string {
+	if o.BuyerElectronicAddressSchemeID != "" {
+		return o.BuyerElectronicAddressSchemeID
+	}
+	return "EM"
+}
+
+func (o Options) notes(doc *generator.Document) []string {
+	if len(o.Notes) > 0 {
+		return o.Notes
+	}
+	if doc.Notes != "" {
+		return []string{doc.Notes}
+	}
+	return nil
 }

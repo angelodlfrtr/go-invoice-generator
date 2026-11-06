@@ -76,6 +76,19 @@ type Tax struct {
 	Percent string `json:"percent,omitempty"` // e.g. "20"
 	Amount  string `json:"amount,omitempty"`  // e.g. "89"
 
+	// Category is the VAT category code (UNTDID 5305) used by e-invoicing
+	// exports such as Factur-X: "S" standard, "Z" zero-rated, "E" exempt,
+	// "AE" reverse charge, "K" intra-community, "G" export, "O" not subject.
+	// It has no effect on the rendered PDF. Empty means the exporter default.
+	Category string `json:"category,omitempty"`
+
+	// ExemptionReason is the free-text reason required by EN 16931 when
+	// Category is anything other than "S" or "Z" (e.g. "TVA non applicable,
+	// art. 293 B du CGI"). ExemptionReasonCode is the matching VATEX code
+	// (e.g. "VATEX-EU-G"). At least one of the two must be set in that case.
+	ExemptionReason     string `json:"exemption_reason,omitempty"`
+	ExemptionReasonCode string `json:"exemption_reason_code,omitempty"`
+
 	_percent decimal.Decimal
 	_amount  decimal.Decimal
 }
